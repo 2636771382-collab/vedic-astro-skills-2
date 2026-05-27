@@ -323,7 +323,6 @@ for i, page in enumerate(doc):
   标注"未启用（时间精度不足）"。如后续rectifier校准了时间，
   可直接启用而不需要重新提取。
 ```
-
 #### 1.6 视觉识别模式
 
 当文本解析策略不可用、或作为双通道的通道B使用时：
@@ -515,13 +514,23 @@ time_risk=LOW：有效精度<=±5分钟，或±15分钟+Lagna安全
 
 2. 行星尊贵度（Compound Dignity / Panchadha Maitri 五重关系）
    -> 每颗行星相对于所在星座守护星的**复合关系**
-   -> 先判主要状态：入庙(Own) / 旺(Exalted) / 陷(Debilitated) → 这三种直接确定，不需要算compound
-   -> 其余情况（非Own/Exalted/Debilitated）→ 必须算Compound：
    
-   Compound计算方法：
-   a) 自然关系(Natural/Naisargika)：查固定表
+   ⚠️⚠️⚠️ 硬性门控（第一步，必须在算compound之前执行）：
+   逐颗检查是否命中旺/入庙/陷，命中则**直接写入结果，跳过compound计算**：
+     旺(Exalted): Sun→Aries, Moon→Taurus, Mars→Capricorn, Mercury→Virgo,
+                  Jupiter→Cancer, Venus→Pisces, Saturn→Libra
+     入庙(Own):   Sun→Leo, Moon→Cancer, Mars→Aries/Scorpio, Mercury→Gemini/Virgo,
+                  Jupiter→Sagittarius/Pisces, Venus→Taurus/Libra, Saturn→Capricorn/Aquarius
+     陷(Debilitated): Sun→Libra, Moon→Scorpio, Mars→Cancer, Mercury→Pisces,
+                       Jupiter→Capricorn, Venus→Virgo, Saturn→Aries
+   ⚠️ 易错案例：Moon in Taurus = 旺(Exalted)！不是friend！
+      Moon的入庙(Own)是Cancer，旺(Exalted)是Taurus — 两个不同概念，历史上曾被混淆。
+   
+   -> 未命中旺/入庙/陷的行星 → 必须算Compound（严格按步骤，不可跳步）：
+   
+   a) 第一步：查自然关系固定表(Natural/Naisargika)
       | 行星 | 友(Mitra) | 敌(Shatru) | 中性(Sama) |
-      |------|-----------|-----------|-----------|
+      |------|-----------|-----------|-----------| 
       | Sun | Moon,Mars,Ju | Venus,Saturn | Mercury |
       | Moon | Sun,Mercury | — | Mars,Ju,Ve,Sa |
       | Mars | Sun,Moon,Ju | Mercury | Venus,Saturn |
@@ -529,13 +538,25 @@ time_risk=LOW：有效精度<=±5分钟，或±15分钟+Lagna安全
       | Jupiter | Sun,Moon,Mars | Mercury,Venus | Saturn |
       | Venus | Mercury,Saturn | Sun,Moon | Mars,Jupiter |
       | Saturn | Mercury,Venus | Sun,Moon,Mars | Jupiter |
+      
+      ⚠️ 查表易错提醒：
+      - Mercury→Jupiter = 中性(Sama)，不是敌！（Jupiter在Mercury的中性列）
+      - Jupiter→Mercury = 敌(Shatru)，不是中性！（关系不对称）
+      - 查表时先找行星所在行，再在友/敌/中性三列中查座主
    
-   b) 临时关系(Temporary/Tatkalika)：从该行星所在宫位数起
-      → 2/3/4/10/11/12宫有行星 = 该行星的临时友(Tatkalika Mitra)
-      → 1/5/6/7/8/9宫有行星 = 该行星的临时敌(Tatkalika Shatru)
-      → 只算Sun~Saturn七颗星，Rahu/Ketu不参与临时关系
+   b) 第二步：算临时关系(Temporary/Tatkalika)
+      方法：计算该行星和座主之间的**星座距离**
+      计算步骤：
+      1. 记录该行星所在星座编号 P (Ar=0,Ta=1,...,Pi=11)
+      2. 记录座主所在星座编号 L
+      3. 距离 dist = (L - P) % 12
+      4. 判定：dist ∈ {1,2,3,9,10,11} → 临时友
+              dist ∈ {0,4,5,6,7,8} → 临时敌
+      
+      ⚠️ 等价理解：座主在该行星的2/3/4/10/11/12宫=临时友，1/5/6/7/8/9宫=临时敌
+      ⚠️ 只算Sun~Saturn七颗星，Rahu/Ketu不参与临时关系
    
-   c) 复合(Compound/Panchadha)：Natural + Temporary 合成
+   c) 第三步：合成复合关系(Compound/Panchadha)
       | 自然关系 | 临时关系 | → 复合尊贵度 |
       |---------|---------|------------|
       | 友(Friend) | 临时友 | **至友(Adhi Mitra)** |
@@ -546,7 +567,14 @@ time_risk=LOW：有效精度<=±5分钟，或±15分钟+Lagna安全
       | 敌(Enemy) | 临时敌 | **死敌(Adhi Shatru)** |
    
    d) Rahu/Ketu：不参与临时关系计算，直接用先天状态（Rahu旺在Ta，Ketu旺在Sc等）
-   
+    
+   e) ⚠️ 最终自查（全部compound生成后逐颗校验）：
+      □ 旺/入庙/陷的行星是否已在门控步骤中直接写入？（不可能出现Moon in Ta=friend）
+      □ 自然关系是否正确查表？（重点检查Mercury→Jupiter=中性、Jupiter→Mercury=敌）
+      □ 临时关系的dist计算是否正确？（用(L-P)%12公式，不要心算）
+      □ 合成表是否查对了行列？
+      如果发现任何矛盾 → 从步骤a重新计算该行星
+    
    -> 最终尊贵度7级：旺 / 入庙 / 至友 / 友方 / 中性 / 敌方 / 死敌 / 陷
 
 3. 主要相位关系（Aspects）
