@@ -15,7 +15,7 @@
 时间来源: [出生证/医院记录 / 家人明确记忆 / 家人大概回忆 / 未追问]
 有效精度: [±分钟级 / ±5分钟 / ±15分钟 / ±1小时 / 不确定]（经来源修正后）
 验证轨道: [轨道1-标准 / 轨道2-严格 / 轨道3-双Lagna]
-读盘方式: [JH表格 / 文本度数 / 视觉识别+用户确认]
+读盘方式: [calc engine / JH表格 / 文本度数 / 视觉识别+用户确认]
 Ayanamsa: [Lahiri / 其他]
 Node模式: [Mean Node / True Node]
 ```
@@ -60,9 +60,10 @@ Node模式: [Mean Node / True Node]
 | 7 | DK | [planet] | [deg] | 配偶指示星（love引用） |
 | 8(8K) | — | Rahu | [30°-原始度数] | 仅8K体系参与排序 |
 
-> 7K体系：Sun~Saturn 共 7 颗，按宫内度数降序排列
-> 8K体系：Sun~Saturn+Rahu 共 8 颗，Rahu度数 = 30° - 原始度数
-> 7K 为主表，8K 仅用于 DK 争议比对
+> 8K体系（主表）：Sun~Saturn+Rahu 共 8 颗，按宫内度数降序排列
+>   Rahu度数 = 30° - 原始度数，参与排序产生 PiK（第8 Karaka）
+> 7K体系（参考）：Sun~Saturn 共 7 颗，不含Rahu
+> 8K 为主表，7K 仅用于 DK 争议比对（当7K和8K的DK不一致时）
 
 ### DK争议
 ```
@@ -146,7 +147,7 @@ Mahadasha: [planet] (YYYY-MM ~ YYYY-MM)
 Antardasha: [planet] (YYYY-MM ~ YYYY-MM)
 ```
 
-## 预分析（reader计算，core直接引用）
+## 预分析（calculator计算，core直接引用）
 
 ### 行星尊贵度（Compound Dignity / Panchadha Maitri）
 | 行星 | 落座 | 座主 | 自然关系 | 临时关系 | 复合尊贵度 | 说明 |
@@ -249,7 +250,7 @@ ABC执行: [未执行 / 已执行 → 结果]
 
 ## 当前过运位置（Transit Data）
 
-> 数据来源：JHora当前日期transit视图
+> 数据来源：calc engine 自动计算（当前日期）
 > 用途：core动态预测（大运×过运交叉分析、Sade Sati检查）
 > 提取时间点：读盘当日日期
 
