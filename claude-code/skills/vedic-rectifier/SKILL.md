@@ -380,8 +380,7 @@ Nakshatra边界：每13°20'（即每个星座内 0°00', 13°20', 26°40'）
 
 下一步：
   a) 直接进入vedic-core分析
-  b) 发送JHora PDF补充更精确的Shadbala值（可选）
-  c) 出几道盲审问题验证校准结果（可选）
+  b) 出几道盲审问题验证校准结果（推荐）
 
 详细报告见 rectification_report.md。
 ```
