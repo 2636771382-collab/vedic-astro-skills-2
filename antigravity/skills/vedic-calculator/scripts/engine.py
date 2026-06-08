@@ -1,9 +1,10 @@
 """
-vedic-calculator v0.4 - 完整原型
-基于pysweph + dashaflow算法模块
-输出完整的structured_data所需数据
+vedic-calculator v0.5 - PyJHora 精确计算引擎
+基于 pysweph 天文核心 + PyJHora 精确算法（含 9 项 Shadbala bug 修正）
+输出完整的 structured_data 所需数据
 
-v0.4: Dasha 计算接入 PyJHora（偏差 ≤2天），fallback 自建算法（6~9天）
+v0.5: 移除所有 dashaflow fallback（错误结果比无结果更糟），fail-fast
+v0.4: Dasha 接入 PyJHora（≤2天）
 v0.3: SAV/Shadbala fallback 显式 WARNING
 """
 import swisseph as swe
@@ -11,43 +12,61 @@ from datetime import datetime, timedelta
 import pytz
 import json
 import sys
-import warnings
 
-# dashaflow模块
-from dashaflow.ashtakavarga import calculate_ashtakavarga
+# dashaflow — 仅用于 dignity/jaimini（这些无 PyJHora bug，不需要修正）
 from dashaflow.dignity import get_dignity, get_compound_relationship, check_combustion, get_digbala
 from dashaflow.jaimini import calculate_jaimini_karakas
-try:
-    from shadbala_pyjhora import calculate_shadbala_fixed as _shadbala_pyjhora
-except ImportError:
-    _shadbala_pyjhora = None
+
+# ── PyJHora 精确模块（必须全部加载，否则 fail-fast）──
+_SETUP_HINT = (
+    "\n╔══════════════════════════════════════════════════════╗\n"
+    "║  PyJHora 未正确安装！请运行:                         ║\n"
+    "║  python vedic-calculator/scripts/setup_env.py        ║\n"
+    "╚══════════════════════════════════════════════════════╝"
+)
+
+_load_errors = []
 try:
     from ashtakavarga_pyjhora import calculate_ashtakavarga_fixed as _av_pyjhora
-except ImportError:
+except ImportError as e:
     _av_pyjhora = None
-    warnings.warn(
-        "[vedic-calculator] ashtakavarga_pyjhora 未加载，SAV 将使用 dashaflow（精度较低）。"
-        "请确保 vedic-calculator/scripts 目录在 sys.path 中，且 PyJHora 已正确安装。",
-        RuntimeWarning, stacklevel=2
-    )
+    _load_errors.append(f'ashtakavarga_pyjhora: {e}')
+try:
+    from shadbala_pyjhora import calculate_shadbala_fixed as _shadbala_pyjhora
+except ImportError as e:
+    _shadbala_pyjhora = None
+    _load_errors.append(f'shadbala_pyjhora: {e}')
+try:
+    from dasha_pyjhora import calculate_dasha_fixed as _dasha_pyjhora
+except ImportError as e:
+    _dasha_pyjhora = None
+    _load_errors.append(f'dasha_pyjhora: {e}')
 try:
     from divisional_pyjhora import calculate_divisional_charts as _div_pyjhora
-except ImportError:
+except ImportError as e:
     _div_pyjhora = None
+    _load_errors.append(f'divisional_pyjhora: {e}')
 try:
     from extras_pyjhora import (
         calculate_bhava_bala as _bhava_bala_pyjhora,
         calculate_special_lagnas as _special_lagnas_pyjhora,
         calculate_vargeeya_bala as _vargeeya_bala_pyjhora,
     )
-except ImportError:
+except ImportError as e:
     _bhava_bala_pyjhora = None
     _special_lagnas_pyjhora = None
     _vargeeya_bala_pyjhora = None
-try:
-    from dasha_pyjhora import calculate_dasha_fixed as _dasha_pyjhora
-except ImportError:
-    _dasha_pyjhora = None
+    _load_errors.append(f'extras_pyjhora: {e}')
+
+# Fail-fast: 核心模块必须全部加载
+_REQUIRED = {'SAV': _av_pyjhora, 'Shadbala': _shadbala_pyjhora, 'Dasha': _dasha_pyjhora}
+_missing = [name for name, mod in _REQUIRED.items() if mod is None]
+if _missing:
+    print(f"\n❌ FATAL: 以下核心模块加载失败: {', '.join(_missing)}", file=sys.stderr)
+    for err in _load_errors:
+        print(f"   → {err}", file=sys.stderr)
+    print(_SETUP_HINT, file=sys.stderr)
+    raise ImportError(f"vedic-calculator 核心模块缺失: {', '.join(_missing)}. 请运行 setup_env.py")
 
 # === 配置 ===
 swe.set_sid_mode(swe.SIDM_LAHIRI)
@@ -463,27 +482,11 @@ def calculate_full_chart(year, month, day, hour, minute, lat, lon, tz_str="Asia/
         'nakshatra': get_nakshatra(ketu_lon)
     }
     
-    # 4. SAV/BAV (via PyJHora, dashaflow fallback)
-    ashtak = None
-    if _av_pyjhora is not None:
-        try:
-            tz = pytz.timezone(tz_str)
-            _tz_dt = tz.localize(datetime(year, month, day, hour, minute))
-            _tz_offset = _tz_dt.utcoffset().total_seconds() / 3600.0
-            ashtak = _av_pyjhora(year, month, day, hour, minute, lat, lon, _tz_offset)
-        except Exception as e:
-            ashtak = None
-            print(f"⚠️ WARNING: PyJHora SAV 计算失败 ({e})，将使用 dashaflow fallback（精度较低）", file=sys.stderr)
-    
-    if ashtak is None:
-        # Fallback to dashaflow — SAV 可能有 5/12 星座偏差！
-        print("⚠️ WARNING: SAV 使用 dashaflow 计算（非 PyJHora）。结果可能与 JHora 有偏差！", file=sys.stderr)
-        print("   修复方法: 运行 setup_env.py 或确保 PyJHora + scripts 目录在 sys.path 中", file=sys.stderr)
-        from dashaflow.ashtakavarga import calculate_ashtakavarga
-        planets_in_signs = {name: p['sign_idx'] for name, p in planets.items() if name not in ['Rahu','Ketu']}
-        planets_in_signs['Rahu'] = planets['Rahu']['sign_idx']
-        planets_in_signs['Ketu'] = planets['Ketu']['sign_idx']
-        ashtak = calculate_ashtakavarga(planets_in_signs, lagna['sign_idx'])
+    # 4. SAV/BAV (PyJHora — no fallback)
+    tz = pytz.timezone(tz_str)
+    _tz_dt = tz.localize(datetime(year, month, day, hour, minute))
+    _tz_offset = _tz_dt.utcoffset().total_seconds() / 3600.0
+    ashtak = _av_pyjhora(year, month, day, hour, minute, lat, lon, _tz_offset)
     
     # Map SAV to houses
     sav_by_house = {}
@@ -492,21 +495,16 @@ def calculate_full_chart(year, month, day, hour, minute, lat, lon, tz_str="Asia/
         sign_name = SIGNS[sign_idx]
         sav_by_house[h] = {'sign': sign_name, 'value': ashtak['sarvashtakavarga'].get(sign_name, 0)}
     
-    # 5. Divisional charts (PyJHora: 15 charts, self-built fallback: 4 charts)
-    divisional_charts = None
+    # 5. Divisional charts (PyJHora: 15 charts)
     if _div_pyjhora is not None:
-        try:
-            tz = pytz.timezone(tz_str)
-            _tz_dt = tz.localize(datetime(year, month, day, hour, minute))
-            _tz_offset = _tz_dt.utcoffset().total_seconds() / 3600.0
-            divisional_charts = _div_pyjhora(
-                year, month, day, hour, minute, lat, lon, _tz_offset
-            )
-        except Exception:
-            divisional_charts = None
+        divisional_charts = _div_pyjhora(
+            year, month, day, hour, minute, lat, lon, _tz_offset
+        )
+    else:
+        divisional_charts = {}
     
-    if divisional_charts is not None:
-        # Extract d9/d10/d4/d5 in legacy (sign_name, sign_idx) format for backward compat
+    # Extract d9/d10/d4/d5 in legacy (sign_name, sign_idx) format for backward compat
+    if divisional_charts:
         def _legacy_fmt(chart_key):
             ch = divisional_charts.get(chart_key, {})
             return {p: (ch[p]['sign'], ch[p]['sign_idx']) for p in ch if 'error' not in ch}
@@ -515,18 +513,7 @@ def calculate_full_chart(year, month, day, hour, minute, lat, lon, tz_str="Asia/
         d4 = _legacy_fmt('D4')
         d5 = _legacy_fmt('D5')
     else:
-        # Fallback to self-built
-        divisional_charts = {}
         d9, d10, d4, d5 = {}, {}, {}, {}
-        for name, p in planets.items():
-            d9[name] = calc_navamsha(p['longitude'])
-            d10[name] = calc_dashamsha(p['longitude'])
-            d4[name] = calc_chaturthamsha(p['longitude'])
-            d5[name] = calc_panchamsha(p['longitude'])
-        d9['Lagna'] = calc_navamsha(lagna['longitude'])
-        d10['Lagna'] = calc_dashamsha(lagna['longitude'])
-        d4['Lagna'] = calc_chaturthamsha(lagna['longitude'])
-        d5['Lagna'] = calc_panchamsha(lagna['longitude'])
     
     # Vargottama check
     vargottama = {}
@@ -635,55 +622,13 @@ def calculate_full_chart(year, month, day, hour, minute, lat, lon, tz_str="Asia/
         if planet in planets:
             info['lord_house'] = planets[planet]['house']
     
-    # 11. Vimsottari Dasha (PyJHora preferred, self-built fallback)
-    dashas = None
-    if _dasha_pyjhora is not None:
-        try:
-            tz = pytz.timezone(tz_str)
-            _tz_dt = tz.localize(datetime(year, month, day, hour, minute))
-            _tz_off = _tz_dt.utcoffset().total_seconds() / 3600
-            dashas = _dasha_pyjhora(year, month, day, hour, minute, lat, lon, _tz_off)
-        except Exception as e:
-            print(f"⚠️ PyJHora Dasha failed ({e}), using self-built fallback", file=sys.stderr)
-    if dashas is None:
-        dashas = calc_vimsottari_dasha(planets['Moon']['longitude'], year, month, day, hour, minute)
+    # 11. Vimsottari Dasha (PyJHora — no fallback)
+    dashas = _dasha_pyjhora(year, month, day, hour, minute, lat, lon, _tz_offset)
     
-    # 12. Shadbala (via PyJHora fixed wrapper, dashaflow fallback)
-    shadbala_data = None
-    if _shadbala_pyjhora is not None:
-        try:
-            # Compute tz_offset from tz_str
-            tz = pytz.timezone(tz_str)
-            _tz_dt = tz.localize(datetime(year, month, day, hour, minute))
-            _tz_offset = _tz_dt.utcoffset().total_seconds() / 3600.0
-            shadbala_data = _shadbala_pyjhora(
-                year, month, day, hour, minute, lat, lon, _tz_offset
-            )
-        except Exception as e:
-            shadbala_data = {'error': f'PyJHora: {e}'}
-    
-    if shadbala_data is None:
-        # Fallback to dashaflow
-        try:
-            from dashaflow.shadbala import calculate_shadbala
-            planets_data_for_sb = {}
-            raw_planets_for_sb = {}
-            for name in ['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn']:
-                p = planets[name]
-                planets_data_for_sb[name] = {
-                    'sign': p['sign'], 'sign_idx': p['sign_idx'],
-                    'degree': p['degree'], 'house': p['house'],
-                    'dignity': dignity_data[name]['basic'],
-                    'is_retrograde': p['retrograde']
-                }
-                raw_planets_for_sb[name] = {
-                    'lon': p['longitude'], 'sign_idx': p['sign_idx'],
-                    'speed': p['speed']
-                }
-            is_day = 6 <= hour <= 18
-            shadbala_data = calculate_shadbala(planets_data_for_sb, raw_planets_for_sb, is_day)
-        except Exception as e:
-            shadbala_data = {'error': str(e)}
+    # 12. Shadbala (PyJHora + 9 bug fixes — no fallback)
+    shadbala_data = _shadbala_pyjhora(
+        year, month, day, hour, minute, lat, lon, _tz_offset
+    )
     
     # 13. Moon phase
     moon_sun_diff = (planets['Moon']['longitude'] - planets['Sun']['longitude']) % 360
