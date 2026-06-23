@@ -82,8 +82,14 @@ def main():
         # 检查版本是否兼容
         ok2, ver_tuple = run_python(python_exe, "import sys; print(sys.version_info[:2])")
         if "(3, 14)" in ver_tuple or "(3, 15)" in ver_tuple:
-            print(f"⚠️  Python {ver} 不兼容 pysweph (需要3.8~3.13)")
-            print(f"   → 需要运行 setup_env.py 创建 venv")
+            # 不兼容 + 无venv → 直接短路，后续检查必然全红，没有信息量
+            print(f"\n{'=' * 50}")
+            print(f"  ⚠️  无 venv + 系统 Python {ver} 不兼容")
+            print(f"  pysweph 需要 Python 3.8~3.13，无法在 {ver} 上运行。")
+            print(f"\n  修复方法（setup_env.py 会自动找 3.12/3.13 创建 venv）:")
+            print(f"  {python_exe} {os.path.join(SCRIPT_DIR, 'setup_env.py')}")
+            print(f"{'=' * 50}")
+            return
     
     # 3. 检查依赖
     print(f"\n── 依赖检查 (使用: {python_exe}) ──")
