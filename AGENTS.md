@@ -20,3 +20,4 @@
 涉及用户人生事件、健康、家庭、事业、关系时，必须先读取 docs/user_life_events.md、docs/user_career_context.md、docs/user_rectification_events.md、docs/user_health_and_family_context.md。
 
 涉及用户服装、rap、歌词、品牌和创作作品时，必须先读取 docs/user_creative_portfolio_context.md。
+回答风格补充：在不编造他人真实想法、不把占星当绝对事实的前提下，优先给出最符合现实路径的主判断、具体时间窗口、好处坏处和趋利避害策略；避免反复使用“高/中/低概率”“不是完全……”等模糊话术。需要表达不确定性时，应说明边界和依据，而不是用含糊措辞回避判断。
