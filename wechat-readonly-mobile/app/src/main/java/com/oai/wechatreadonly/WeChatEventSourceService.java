@@ -4,9 +4,9 @@ import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
-import android.graphics.HardwareBuffer;
 import android.graphics.Path;
 import android.graphics.Rect;
+import android.hardware.HardwareBuffer;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -178,7 +178,6 @@ public class WeChatEventSourceService extends AccessibilityService {
         if (text.matches("^(\\d{1,2}:\\d{2}|\\d{1,2}月\\d{1,2}日.*|昨天.*|周[一二三四五六日].*)$")) {
             return false;
         }
-        // Narrow UI labels or status-bar garbage are unlikely to be message bodies.
         if (box.height() < 12 || box.width() < 10) return false;
         return true;
     }
