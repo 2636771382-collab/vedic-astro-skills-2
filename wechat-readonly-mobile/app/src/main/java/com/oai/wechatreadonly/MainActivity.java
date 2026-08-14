@@ -18,14 +18,16 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class MainActivity extends Activity {
-    private static final int REQ_EXPORT = 42, REQ_DUMP = 43;
+    private static final int REQ_EXPORT = 42, REQ_DUMP = 43, REQ_EXPORT_ZIP = 44;
     private EditText contact, pages, query;
     private TextView status, results;
     private ChatDbHelper db;
+    private EvidenceStore evidenceStore;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         db = new ChatDbHelper(this);
+        evidenceStore = new EvidenceStore(this);
 
         ScrollView sv = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
@@ -34,12 +36,12 @@ public class MainActivity extends Activity {
         sv.addView(root);
 
         TextView title = new TextView(this);
-        title.setText("微信只读索引 · v0.6 无人值守");
+        title.setText("微信只读索引 · v0.7 视觉证据版");
         title.setTextSize(23);
         root.addView(title, lp());
 
         TextView note = new TextView(this);
-        note.setText("只读、不解密数据库、不发消息。v0.6会先确认微信顶部确实是目标联系人，随后自动向历史方向翻页、截图OCR、识别双方、时间锚点和通话记录。无人值守启动后屏幕会自动压暗，采集结束会震动。");
+        note.setText("只读、不解密数据库、不发消息。v0.7除OCR外，会把每个有效聊天屏幕压缩保存为视觉证据，因此表情包、图片、头像、通话卡片等不会因为OCR读不到就消失。完整导出请用ZIP。");
         note.setTextSize(15);
         root.addView(note, lp());
 
@@ -51,20 +53,20 @@ public class MainActivity extends Activity {
         contact.setText(CapturePrefs.getContact(this));
         root.addView(contact, lp());
 
-        Button start = btn("② 开始只读OCR");
+        Button start = btn("② 开始只读OCR + 视觉保存");
         start.setOnClickListener(v -> {
             String c = currentContact();
             if (c.isEmpty()) return;
             CapturePrefs.setContact(this, c);
             CapturePrefs.setEnabled(this, true);
-            toast("已开启。只有识别到微信顶部是「" + c + "」时才会写入数据。");
+            toast("已开启。只有识别到微信顶部是「" + c + "」时才会写入数据和视觉页。");
             refresh();
         });
         root.addView(start, lp());
 
-        pages = edit("无人值守最大翻页数，默认300");
+        pages = edit("无人值守最大翻页数，默认500");
         pages.setInputType(InputType.TYPE_CLASS_NUMBER);
-        pages.setText("300");
+        pages.setText("500");
         root.addView(pages, lp());
 
         Button auto = btn("③ 无人值守：自动抓到聊天顶部");
@@ -78,10 +80,10 @@ public class MainActivity extends Activity {
                 toast("先开启无障碍服务");
                 return;
             }
-            int n = 300;
+            int n = 500;
             try { n = Integer.parseInt(pages.getText().toString()); } catch (Exception ignored) {}
             s.startAuto(n);
-            toast("现在只需切到「" + c + "」聊天页。锁定标题后它会自己翻，别锁屏就行。");
+            toast("切到「" + c + "」聊天页后放着即可。它会自动保存文字和每屏视觉证据。");
             refresh();
         });
         root.addView(auto, lp());
@@ -94,12 +96,13 @@ public class MainActivity extends Activity {
         });
         root.addView(stop, lp());
 
-        Button clear = btn("清空当前联系人本地数据");
+        Button clear = btn("清空当前联系人本地数据 + 视觉页");
         clear.setOnClickListener(v -> {
             String c = currentContact();
             if (c.isEmpty()) return;
             db.clearContact(c);
-            toast("已清空「" + c + "」的v0.6本地数据");
+            evidenceStore.clearContact(c);
+            toast("已清空「" + c + "」的v0.7数据和视觉证据");
             refresh();
         });
         root.addView(clear, lp());
@@ -114,18 +117,29 @@ public class MainActivity extends Activity {
         search.setOnClickListener(v -> doSearch());
         root.addView(search, lp());
 
-        Button export = btn("导出当前联系人 JSONL");
+        Button exportZip = btn("★ 导出完整证据 ZIP（推荐给ChatGPT）");
+        exportZip.setOnClickListener(v -> {
+            String c = currentContact();
+            if (c.isEmpty()) return;
+            Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            i.setType("application/zip");
+            i.putExtra(Intent.EXTRA_TITLE, safe(c) + "_wechat_v07_evidence.zip");
+            startActivityForResult(i, REQ_EXPORT_ZIP);
+        });
+        root.addView(exportZip, lp());
+
+        Button export = btn("仅导出结构化 JSONL");
         export.setOnClickListener(v -> {
             String c = currentContact();
             if (c.isEmpty()) return;
             Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
             i.setType("application/x-ndjson");
-            i.putExtra(Intent.EXTRA_TITLE, safe(c) + "_wechat_v06.jsonl");
+            i.putExtra(Intent.EXTRA_TITLE, safe(c) + "_wechat_v07.jsonl");
             startActivityForResult(i, REQ_EXPORT);
         });
         root.addView(export, lp());
 
-        Button dump = btn("诊断：导出v0.6状态");
+        Button dump = btn("诊断：导出v0.7状态");
         dump.setOnClickListener(v -> {
             if (WeChatAccessibilityService.INSTANCE == null) {
                 toast("先开启无障碍服务");
@@ -133,7 +147,7 @@ public class MainActivity extends Activity {
             }
             Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
             i.setType("text/plain");
-            i.putExtra(Intent.EXTRA_TITLE, "wechat_ocr_status_v06.txt");
+            i.putExtra(Intent.EXTRA_TITLE, "wechat_ocr_status_v07.txt");
             startActivityForResult(i, REQ_DUMP);
         });
         root.addView(dump, lp());
@@ -170,10 +184,11 @@ public class MainActivity extends Activity {
         int messages = c.isEmpty() ? 0 : db.countKind(c, "message");
         int calls = c.isEmpty() ? 0 : db.countKind(c, "call");
         int times = c.isEmpty() ? 0 : db.countKind(c, "time");
+        int screens = c.isEmpty() ? 0 : evidenceStore.countScreens(c);
         status.setText(
                 (CapturePrefs.isEnabled(this) ? "采集开" : "采集关") + " · " +
                         (WeChatAccessibilityService.INSTANCE != null ? "服务已连接" : "服务未连接") +
-                        "\n消息 " + messages + " · 通话 " + calls + " · 时间锚点 " + times +
+                        "\n消息 " + messages + " · 通话 " + calls + " · 时间锚点 " + times + " · 视觉页 " + screens +
                         "\n" + CapturePrefs.getStatus(this));
     }
 
@@ -190,13 +205,16 @@ public class MainActivity extends Activity {
         try (OutputStream os = getContentResolver().openOutputStream(uri)) {
             if (requestCode == REQ_EXPORT) {
                 db.exportJsonl(currentContact(), os);
-                toast("v0.6 JSONL已导出");
+                toast("v0.7 JSONL已导出");
+            } else if (requestCode == REQ_EXPORT_ZIP) {
+                evidenceStore.exportZip(currentContact(), db, os);
+                toast("v0.7完整证据ZIP已导出：里面含JSONL和所有视觉页");
             } else if (requestCode == REQ_DUMP) {
                 String d = WeChatAccessibilityService.INSTANCE == null
                         ? "# service unavailable\n"
                         : WeChatAccessibilityService.INSTANCE.dumpTree();
                 os.write(d.getBytes(StandardCharsets.UTF_8));
-                toast("v0.6状态已导出");
+                toast("v0.7状态已导出");
             }
         } catch (Exception e) {
             toast("导出失败：" + e.getMessage());
