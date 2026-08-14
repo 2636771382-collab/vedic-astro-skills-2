@@ -7,11 +7,11 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId "com.oai.wechatreadonly.v04"
+        applicationId "com.oai.wechatreadonly.v05"
         minSdk 30
         targetSdk 35
-        versionCode 4
-        versionName "0.4.0"
+        versionCode 5
+        versionName "0.5.0"
     }
 
     buildTypes {
