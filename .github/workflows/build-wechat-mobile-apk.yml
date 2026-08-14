@@ -34,8 +34,8 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: wechat-readonly-mobile-debug-apk-v0.3
+          name: wechat-readonly-mobile-v0.3.1-distinct-package
           path: wechat-readonly-mobile/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-# rebuild marker: v0.3-event-source
+# rebuild marker: v0.3.1-distinct-package
