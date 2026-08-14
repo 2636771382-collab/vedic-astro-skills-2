@@ -34,8 +34,8 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: wechat-readonly-mobile-v0.6-unattended
+          name: wechat-readonly-mobile-v0.7-visual-evidence
           path: wechat-readonly-mobile/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-# rebuild marker: v0.6-unattended
+# rebuild marker: v0.7-visual-evidence
