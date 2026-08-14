@@ -13,7 +13,7 @@ import java.util.List;
 
 public class ChatDbHelper extends SQLiteOpenHelper {
     public ChatDbHelper(Context c) {
-        super(c, "wechat_readonly_v06.db", null, 1);
+        super(c, "wechat_readonly_v07.db", null, 1);
     }
 
     @Override
@@ -34,7 +34,8 @@ public class ChatDbHelper extends SQLiteOpenHelper {
                         "source TEXT," +
                         "call_status TEXT," +
                         "call_duration_seconds INTEGER," +
-                        "duplicate_hint INTEGER NOT NULL DEFAULT 0" +
+                        "duplicate_hint INTEGER NOT NULL DEFAULT 0," +
+                        "evidence_file TEXT" +
                         ")"
         );
         db.execSQL("CREATE INDEX idx_contact_capture ON records(contact,captured_at,capture_id,seq_in_capture)");
@@ -49,7 +50,7 @@ public class ChatDbHelper extends SQLiteOpenHelper {
                                 int left, int top, int right, int bottom,
                                 float confidence, String source,
                                 String callStatus, Integer callDurationSeconds,
-                                boolean duplicateHint) {
+                                boolean duplicateHint, String evidenceFile) {
         if (text == null || text.trim().isEmpty()) return false;
         ContentValues v = new ContentValues();
         v.put("contact", contact == null ? "" : contact.trim());
@@ -69,6 +70,7 @@ public class ChatDbHelper extends SQLiteOpenHelper {
         if (callStatus != null) v.put("call_status", callStatus);
         if (callDurationSeconds != null) v.put("call_duration_seconds", callDurationSeconds);
         v.put("duplicate_hint", duplicateHint ? 1 : 0);
+        if (evidenceFile != null) v.put("evidence_file", evidenceFile);
         return getWritableDatabase().insert("records", null, v) != -1;
     }
 
@@ -121,7 +123,7 @@ public class ChatDbHelper extends SQLiteOpenHelper {
         try (Cursor c = getReadableDatabase().rawQuery(
                 "SELECT sender,kind,text,wechat_time,captured_at,capture_id,seq_in_capture," +
                         "left_px,top_px,right_px,bottom_px,confidence,source," +
-                        "call_status,call_duration_seconds,duplicate_hint " +
+                        "call_status,call_duration_seconds,duplicate_hint,evidence_file " +
                         "FROM records WHERE contact=? ORDER BY id",
                 new String[]{contact})) {
             while (c.moveToNext()) {
@@ -143,7 +145,8 @@ public class ChatDbHelper extends SQLiteOpenHelper {
                         "\"source\":" + j(c.getString(12)) + "," +
                         "\"call_status\":" + nullableString(c, 13) + "," +
                         "\"call_duration_seconds\":" + (c.isNull(14) ? "null" : String.valueOf(c.getInt(14))) + "," +
-                        "\"duplicate_hint\":" + (c.getInt(15) == 1 ? "true" : "false") +
+                        "\"duplicate_hint\":" + (c.getInt(15) == 1 ? "true" : "false") + "," +
+                        "\"evidence_file\":" + nullableString(c, 16) +
                         "}\n";
                 os.write(line.getBytes(StandardCharsets.UTF_8));
             }
