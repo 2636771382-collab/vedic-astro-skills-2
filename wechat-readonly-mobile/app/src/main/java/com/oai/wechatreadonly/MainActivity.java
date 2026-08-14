@@ -27,22 +27,22 @@ public class MainActivity extends Activity {
         super.onCreate(b); db = new ChatDbHelper(this);
         ScrollView sv = new ScrollView(this);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(18),dp(16),dp(18),dp(24)); sv.addView(root);
-        TextView title = new TextView(this); title.setText("微信只读索引 · 手机版 v0.1"); title.setTextSize(23); root.addView(title, lp());
-        TextView note = new TextView(this); note.setText("只读当前手机微信已显示的聊天界面，不解密数据库，不发消息，不联网。\n第一版先验证你这版微信的UI节点结构。"); note.setTextSize(15); root.addView(note, lp());
+        TextView title = new TextView(this); title.setText("微信只读索引 · 手机版 v0.3"); title.setTextSize(23); root.addView(title, lp());
+        TextView note = new TextView(this); note.setText("v0.3直接读取微信无障碍事件自带的节点树。只读、不解密数据库、不发消息、不联网。"); note.setTextSize(15); root.addView(note, lp());
 
         Button acc = btn("① 打开系统无障碍设置"); acc.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))); root.addView(acc, lp());
         contact = edit("联系人标签，例如：韩琪"); contact.setText(CapturePrefs.getContact(this)); root.addView(contact, lp());
-        Button start = btn("② 开始只读采集"); start.setOnClickListener(v -> { String c=currentContact(); if(c.isEmpty())return; CapturePrefs.setContact(this,c); CapturePrefs.setEnabled(this,true); toast("已开启。切到微信聊天窗口并上下滚动。"); refresh(); }); root.addView(start, lp());
+        Button start = btn("② 开始只读采集"); start.setOnClickListener(v -> { String c=currentContact(); if(c.isEmpty())return; CapturePrefs.setContact(this,c); CapturePrefs.setEnabled(this,true); toast("已开启。切到微信聊天窗口，上下滚动即可触发采集。"); refresh(); }); root.addView(start, lp());
         Button stop = btn("停止采集"); stop.setOnClickListener(v -> { CapturePrefs.setEnabled(this,false); if(WeChatAccessibilityService.INSTANCE!=null) WeChatAccessibilityService.INSTANCE.stopAuto(); refresh(); }); root.addView(stop, lp());
 
         pages = edit("自动向上翻多少页，默认80"); pages.setInputType(InputType.TYPE_CLASS_NUMBER); pages.setText("80"); root.addView(pages, lp());
-        Button auto = btn("③ 自动向上抓历史"); auto.setOnClickListener(v -> { String c=currentContact(); if(c.isEmpty())return; CapturePrefs.setContact(this,c); WeChatAccessibilityService s=WeChatAccessibilityService.INSTANCE; if(s==null){toast("先开启无障碍服务");return;} int n=80; try{n=Integer.parseInt(pages.getText().toString());}catch(Exception ignored){} s.startAuto(n); toast("开始自动翻页。请保持微信聊天窗口在前台。"); }); root.addView(auto, lp());
+        Button auto = btn("③ 自动向上抓历史"); auto.setOnClickListener(v -> { String c=currentContact(); if(c.isEmpty())return; CapturePrefs.setContact(this,c); WeChatAccessibilityService s=WeChatAccessibilityService.INSTANCE; if(s==null){toast("先开启无障碍服务");return;} int n=80; try{n=Integer.parseInt(pages.getText().toString());}catch(Exception ignored){} s.startAuto(n); toast("自动模式已开启。切回微信聊天页并保持前台。"); }); root.addView(auto, lp());
 
         status = new TextView(this); root.addView(status, lp());
         query = edit("本地搜索关键词，例如：考研"); root.addView(query, lp());
         Button search = btn("搜索本地聊天"); search.setOnClickListener(v -> doSearch()); root.addView(search, lp());
         Button export = btn("导出当前联系人 JSONL"); export.setOnClickListener(v -> { String c=currentContact(); if(c.isEmpty())return; Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT); i.setType("application/x-ndjson"); i.putExtra(Intent.EXTRA_TITLE, safe(c)+"_wechat.jsonl"); startActivityForResult(i,REQ_EXPORT); }); root.addView(export, lp());
-        Button dump = btn("诊断：导出当前微信 UI 树"); dump.setOnClickListener(v -> { if(WeChatAccessibilityService.INSTANCE==null){toast("先开启无障碍，并切到微信聊天窗口");return;} Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT); i.setType("text/plain"); i.putExtra(Intent.EXTRA_TITLE,"wechat_ui_dump.txt"); startActivityForResult(i,REQ_DUMP); }); root.addView(dump, lp());
+        Button dump = btn("诊断：导出当前微信 UI 树"); dump.setOnClickListener(v -> { if(WeChatAccessibilityService.INSTANCE==null){toast("先开启无障碍，并切到微信聊天窗口");return;} Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT); i.setType("text/plain"); i.putExtra(Intent.EXTRA_TITLE,"wechat_ui_dump_v03.txt"); startActivityForResult(i,REQ_DUMP); }); root.addView(dump, lp());
         results = new TextView(this); results.setTextIsSelectable(true); root.addView(results, lp());
         setContentView(sv); refresh();
     }
