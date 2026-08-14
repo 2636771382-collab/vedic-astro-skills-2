@@ -7,11 +7,11 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId "com.oai.wechatreadonly.v03"
-        minSdk 26
+        applicationId "com.oai.wechatreadonly.v04"
+        minSdk 30
         targetSdk 35
-        versionCode 3
-        versionName "0.3.1"
+        versionCode 4
+        versionName "0.4.0"
     }
 
     buildTypes {
@@ -24,4 +24,8 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    implementation 'com.google.mlkit:text-recognition-chinese:16.0.1'
 }
