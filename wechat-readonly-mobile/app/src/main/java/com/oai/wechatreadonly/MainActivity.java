@@ -23,41 +23,216 @@ public class MainActivity extends Activity {
     private TextView status, results;
     private ChatDbHelper db;
 
-    @Override protected void onCreate(Bundle b) {
-        super.onCreate(b); db = new ChatDbHelper(this);
+    @Override
+    protected void onCreate(Bundle b) {
+        super.onCreate(b);
+        db = new ChatDbHelper(this);
+
         ScrollView sv = new ScrollView(this);
-        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(18),dp(16),dp(18),dp(24)); sv.addView(root);
-        TextView title = new TextView(this); title.setText("微信只读索引 · 手机版 v0.4 OCR"); title.setTextSize(23); root.addView(title, lp());
-        TextView note = new TextView(this); note.setText("v0.4不再依赖微信文字节点：直接用无障碍截图 + 本机中文OCR识别屏幕聊天。只读、不解密数据库、不发消息。"); note.setTextSize(15); root.addView(note, lp());
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(18), dp(16), dp(18), dp(24));
+        sv.addView(root);
 
-        Button acc = btn("① 打开系统无障碍设置"); acc.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))); root.addView(acc, lp());
-        contact = edit("联系人标签，例如：韩琪"); contact.setText(CapturePrefs.getContact(this)); root.addView(contact, lp());
-        Button start = btn("② 开始OCR采集"); start.setOnClickListener(v -> { String c=currentContact(); if(c.isEmpty())return; CapturePrefs.setContact(this,c); CapturePrefs.setEnabled(this,true); toast("已开启。切到微信聊天窗口，滚动时会自动截图OCR。"); refresh(); }); root.addView(start, lp());
-        Button stop = btn("停止采集"); stop.setOnClickListener(v -> { CapturePrefs.setEnabled(this,false); if(WeChatAccessibilityService.INSTANCE!=null) WeChatAccessibilityService.INSTANCE.stopAuto(); refresh(); }); root.addView(stop, lp());
+        TextView title = new TextView(this);
+        title.setText("微信只读索引 · 手机版 v0.5");
+        title.setTextSize(23);
+        root.addView(title, lp());
 
-        pages = edit("自动向上翻多少页，默认80"); pages.setInputType(InputType.TYPE_CLASS_NUMBER); pages.setText("80"); root.addView(pages, lp());
-        Button auto = btn("③ 自动OCR并向上抓历史"); auto.setOnClickListener(v -> { String c=currentContact(); if(c.isEmpty())return; CapturePrefs.setContact(this,c); WeChatAccessibilityService s=WeChatAccessibilityService.INSTANCE; if(s==null){toast("先开启无障碍服务");return;} int n=80; try{n=Integer.parseInt(pages.getText().toString());}catch(Exception ignored){} s.startAuto(n); toast("自动OCR已待命。现在切回微信聊天页并保持前台。"); }); root.addView(auto, lp());
+        TextView note = new TextView(this);
+        note.setText("v0.5：截图OCR + 绿/白气泡识别发送方 + 按气泡合并文字 + 识别微信时间。只读、不解密数据库、不发消息。");
+        note.setTextSize(15);
+        root.addView(note, lp());
 
-        status = new TextView(this); root.addView(status, lp());
-        query = edit("本地搜索关键词，例如：考研"); root.addView(query, lp());
-        Button search = btn("搜索本地聊天"); search.setOnClickListener(v -> doSearch()); root.addView(search, lp());
-        Button export = btn("导出当前联系人 JSONL"); export.setOnClickListener(v -> { String c=currentContact(); if(c.isEmpty())return; Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT); i.setType("application/x-ndjson"); i.putExtra(Intent.EXTRA_TITLE, safe(c)+"_wechat_ocr.jsonl"); startActivityForResult(i,REQ_EXPORT); }); root.addView(export, lp());
-        Button dump = btn("诊断：导出OCR状态"); dump.setOnClickListener(v -> { if(WeChatAccessibilityService.INSTANCE==null){toast("先开启无障碍服务");return;} Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT); i.setType("text/plain"); i.putExtra(Intent.EXTRA_TITLE,"wechat_ocr_status_v04.txt"); startActivityForResult(i,REQ_DUMP); }); root.addView(dump, lp());
-        results = new TextView(this); results.setTextIsSelectable(true); root.addView(results, lp());
-        setContentView(sv); refresh();
+        Button acc = btn("① 打开系统无障碍设置");
+        acc.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        root.addView(acc, lp());
+
+        contact = edit("联系人标签，例如：韩琪");
+        contact.setText(CapturePrefs.getContact(this));
+        root.addView(contact, lp());
+
+        Button start = btn("② 开始OCR采集");
+        start.setOnClickListener(v -> {
+            String c = currentContact();
+            if (c.isEmpty()) return;
+            CapturePrefs.setContact(this, c);
+            CapturePrefs.setEnabled(this, true);
+            toast("已开启。切到微信聊天窗口，正常上翻即可。");
+            refresh();
+        });
+        root.addView(start, lp());
+
+        Button stop = btn("停止采集");
+        stop.setOnClickListener(v -> {
+            CapturePrefs.setEnabled(this, false);
+            if (WeChatAccessibilityService.INSTANCE != null) WeChatAccessibilityService.INSTANCE.stopAuto();
+            refresh();
+        });
+        root.addView(stop, lp());
+
+        pages = edit("自动向上翻多少页，默认80");
+        pages.setInputType(InputType.TYPE_CLASS_NUMBER);
+        pages.setText("80");
+        root.addView(pages, lp());
+
+        Button auto = btn("③ 自动OCR并向上抓历史");
+        auto.setOnClickListener(v -> {
+            String c = currentContact();
+            if (c.isEmpty()) return;
+            CapturePrefs.setContact(this, c);
+            WeChatAccessibilityService s = WeChatAccessibilityService.INSTANCE;
+            if (s == null) {
+                toast("先开启无障碍服务");
+                return;
+            }
+            int n = 80;
+            try { n = Integer.parseInt(pages.getText().toString().trim()); }
+            catch (Exception ignored) {}
+            s.startAuto(n);
+            toast("自动OCR已待命。现在切回微信聊天页并保持前台。");
+        });
+        root.addView(auto, lp());
+
+        status = new TextView(this);
+        root.addView(status, lp());
+
+        query = edit("本地搜索关键词，例如：考研");
+        root.addView(query, lp());
+
+        Button search = btn("搜索本地聊天");
+        search.setOnClickListener(v -> doSearch());
+        root.addView(search, lp());
+
+        Button export = btn("导出结构化 JSONL");
+        export.setOnClickListener(v -> {
+            String c = currentContact();
+            if (c.isEmpty()) return;
+            Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            i.setType("application/x-ndjson");
+            i.putExtra(Intent.EXTRA_TITLE, safe(c) + "_wechat_v05.jsonl");
+            startActivityForResult(i, REQ_EXPORT);
+        });
+        root.addView(export, lp());
+
+        Button clear = btn("清空当前联系人本地索引");
+        clear.setOnClickListener(v -> {
+            String c = currentContact();
+            if (c.isEmpty()) return;
+            db.clearContact(c);
+            results.setText("");
+            toast("已清空 " + c + " 的v0.5本地索引");
+            refresh();
+        });
+        root.addView(clear, lp());
+
+        Button dump = btn("诊断：导出OCR状态");
+        dump.setOnClickListener(v -> {
+            if (WeChatAccessibilityService.INSTANCE == null) {
+                toast("先开启无障碍服务");
+                return;
+            }
+            Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            i.setType("text/plain");
+            i.putExtra(Intent.EXTRA_TITLE, "wechat_ocr_status_v05.txt");
+            startActivityForResult(i, REQ_DUMP);
+        });
+        root.addView(dump, lp());
+
+        results = new TextView(this);
+        results.setTextIsSelectable(true);
+        root.addView(results, lp());
+
+        setContentView(sv);
+        refresh();
     }
 
-    @Override protected void onResume(){ super.onResume(); refresh(); }
-    private void doSearch(){ String c=currentContact(), q=query.getText().toString().trim(); if(c.isEmpty()||q.isEmpty()){toast("先填联系人和关键词");return;} List<String> rows=db.search(c,q,100); StringBuilder sb=new StringBuilder("结果 "+rows.size()+" 条\n\n"); for(String s:rows) sb.append(s).append("\n\n"); results.setText(sb.toString()); }
-    private void refresh(){ if(status==null)return; String c=contact==null?"":contact.getText().toString().trim(); int n=c.isEmpty()?0:db.count(c); status.setText((CapturePrefs.isEnabled(this)?"采集开":"采集关")+" · "+(WeChatAccessibilityService.INSTANCE!=null?"服务已连接":"服务未连接")+" · 当前联系人候选 "+n+" 条\n"+CapturePrefs.getStatus(this)); }
-    private String currentContact(){ String c=contact.getText().toString().trim(); if(c.isEmpty())toast("先填联系人标签"); return c; }
+    @Override
+    protected void onResume() {
+        super.onResume();
+        refresh();
+    }
 
-    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){ super.onActivityResult(requestCode,resultCode,data); if(resultCode!=RESULT_OK||data==null||data.getData()==null)return; Uri uri=data.getData(); try(OutputStream os=getContentResolver().openOutputStream(uri)){ if(requestCode==REQ_EXPORT){db.exportJsonl(currentContact(),os); toast("JSONL已导出");} else if(requestCode==REQ_DUMP){String d=WeChatAccessibilityService.INSTANCE==null?"# service unavailable\n":WeChatAccessibilityService.INSTANCE.dumpTree(); os.write(d.getBytes(StandardCharsets.UTF_8)); toast("OCR状态已导出");} }catch(Exception e){toast("导出失败："+e.getMessage());} }
+    private void doSearch() {
+        String c = currentContact();
+        String q = query.getText().toString().trim();
+        if (c.isEmpty() || q.isEmpty()) {
+            toast("先填联系人和关键词");
+            return;
+        }
+        List<String> rows = db.search(c, q, 100);
+        StringBuilder sb = new StringBuilder("结果 ").append(rows.size()).append(" 条\n\n");
+        for (String s : rows) sb.append(s).append("\n\n");
+        results.setText(sb.toString());
+    }
 
-    private Button btn(String s){ Button b=new Button(this); b.setText(s); b.setAllCaps(false); return b; }
-    private EditText edit(String h){ EditText e=new EditText(this); e.setHint(h); e.setSingleLine(true); return e; }
-    private LinearLayout.LayoutParams lp(){ LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.bottomMargin=dp(8); return p; }
-    private int dp(int n){ return (int)(n*getResources().getDisplayMetrics().density+.5f); }
-    private void toast(String s){ Toast.makeText(this,s,Toast.LENGTH_LONG).show(); }
-    private static String safe(String s){ return s.replaceAll("[\\\\/:*?\"<>|]","_"); }
+    private void refresh() {
+        if (status == null) return;
+        String c = contact == null ? "" : contact.getText().toString().trim();
+        int n = c.isEmpty() ? 0 : db.count(c);
+        status.setText(
+                (CapturePrefs.isEnabled(this) ? "采集开" : "采集关") +
+                        " · " + (WeChatAccessibilityService.INSTANCE != null ? "服务已连接" : "服务未连接") +
+                        " · 当前联系人消息 " + n + " 条\n" + CapturePrefs.getStatus(this)
+        );
+    }
+
+    private String currentContact() {
+        String c = contact.getText().toString().trim();
+        if (c.isEmpty()) toast("先填联系人标签");
+        return c;
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        Uri uri = data.getData();
+        try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+            if (requestCode == REQ_EXPORT) {
+                db.exportJsonl(currentContact(), os);
+                toast("结构化JSONL已导出");
+            } else if (requestCode == REQ_DUMP) {
+                String d = WeChatAccessibilityService.INSTANCE == null
+                        ? "# service unavailable\n"
+                        : WeChatAccessibilityService.INSTANCE.dumpTree();
+                os.write(d.getBytes(StandardCharsets.UTF_8));
+                toast("OCR状态已导出");
+            }
+        } catch (Exception e) {
+            toast("导出失败：" + e.getMessage());
+        }
+    }
+
+    private Button btn(String s) {
+        Button b = new Button(this);
+        b.setText(s);
+        b.setAllCaps(false);
+        return b;
+    }
+
+    private EditText edit(String h) {
+        EditText e = new EditText(this);
+        e.setHint(h);
+        e.setSingleLine(true);
+        return e;
+    }
+
+    private LinearLayout.LayoutParams lp() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
+        p.bottomMargin = dp(8);
+        return p;
+    }
+
+    private int dp(int n) {
+        return (int) (n * getResources().getDisplayMetrics().density + .5f);
+    }
+
+    private void toast(String s) {
+        Toast.makeText(this, s, Toast.LENGTH_LONG).show();
+    }
+
+    private static String safe(String s) {
+        return s.replaceAll("[\\\\/:*?\"<>|]", "_");
+    }
 }
