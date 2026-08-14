@@ -6,12 +6,17 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.ColorSpace;
 import android.graphics.Path;
+import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.hardware.HardwareBuffer;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.view.Display;
+import android.view.View;
+import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 
 import com.google.mlkit.vision.common.InputImage;
@@ -22,10 +27,13 @@ import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class WeChatEventSourceService extends AccessibilityService {
@@ -37,28 +45,36 @@ public class WeChatEventSourceService extends AccessibilityService {
                     "周[一二三四五六日天](?:\\s*\\d{1,2}:\\d{2})?|" +
                     "\\d{1,2}月\\d{1,2}日(?:\\s*\\d{1,2}:\\d{2})?|" +
                     "\\d{4}年\\d{1,2}月\\d{1,2}日(?:\\s*\\d{1,2}:\\d{2})?)$");
+    private static final Pattern CALL_DURATION_PATTERN = Pattern.compile("(\\d{1,3})\\s*[:：]\\s*(\\d{2})");
 
     protected ChatDbHelper db;
     private TextRecognizer recognizer;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final AtomicBoolean ocrBusy = new AtomicBoolean(false);
     private final AtomicBoolean autoRunning = new AtomicBoolean(false);
+
     private volatile boolean swipeScheduled = false;
+    private volatile boolean autoLoopStarted = false;
+    private volatile boolean lastScreenVerified = false;
     private volatile int autoPage = 0;
     private volatile int autoMax = 0;
     private volatile long lastWechatEventAt = 0L;
     private volatile long lastScreenshotAt = 0L;
-    private volatile String lastWechatTime = null;
+    private volatile String lastVisibleWechatTime = null;
+    private String lastScreenSignature = null;
+    private int sameScreenCount = 0;
+    private Set<String> previousScreenKeys = new HashSet<>();
+
+    private WindowManager windowManager;
+    private View privacyOverlay;
 
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
         db = new ChatDbHelper(this);
         recognizer = TextRecognition.getClient(new ChineseTextRecognizerOptions.Builder().build());
-        if (this instanceof WeChatAccessibilityService) {
-            INSTANCE = (WeChatAccessibilityService) this;
-        }
-        CapturePrefs.setStatus(this, "无障碍服务已连接 · v0.5气泡识别OCR");
+        if (this instanceof WeChatAccessibilityService) INSTANCE = (WeChatAccessibilityService) this;
+        CapturePrefs.setStatus(this, "无障碍服务已连接 · v0.6无人值守OCR");
     }
 
     @Override
@@ -68,16 +84,18 @@ public class WeChatEventSourceService extends AccessibilityService {
         if (!CapturePrefs.isEnabled(this)) return;
 
         lastWechatEventAt = System.currentTimeMillis();
-        requestOcrScreenshot("微信事件");
 
-        if (autoRunning.get() && !swipeScheduled) scheduleNextSwipe();
+        // Once unattended mode has locked onto the requested chat, its own loop drives captures.
+        // Ignoring incidental WeChat events prevents duplicate screenshots between programmed swipes.
+        if (autoRunning.get() && autoLoopStarted) return;
+        requestOcrScreenshot(autoRunning.get() ? "自动开始" : "微信事件");
     }
 
     @Override public void onInterrupt() {}
 
     @Override
     public void onDestroy() {
-        autoRunning.set(false);
+        finishAuto(null, false);
         if (recognizer != null) recognizer.close();
         if (INSTANCE == this) INSTANCE = null;
         super.onDestroy();
@@ -90,11 +108,11 @@ public class WeChatEventSourceService extends AccessibilityService {
 
     private void requestOcrScreenshot(String source) {
         if (Build.VERSION.SDK_INT < 30) {
-            CapturePrefs.setStatus(this, "v0.5需要Android 11或以上");
+            CapturePrefs.setStatus(this, "v0.6需要Android 11或以上");
             return;
         }
         long now = System.currentTimeMillis();
-        if (now - lastScreenshotAt < 1000) return;
+        if (now - lastScreenshotAt < 700) return;
         if (!ocrBusy.compareAndSet(false, true)) return;
         lastScreenshotAt = now;
 
@@ -108,7 +126,7 @@ public class WeChatEventSourceService extends AccessibilityService {
                     if (hw == null) {
                         buffer.close();
                         ocrBusy.set(false);
-                        CapturePrefs.setStatus(WeChatEventSourceService.this, "v0.5截图成功但Bitmap为空");
+                        CapturePrefs.setStatus(WeChatEventSourceService.this, "v0.6截图成功但Bitmap为空");
                         return;
                     }
                     Bitmap bitmap = hw.copy(Bitmap.Config.ARGB_8888, false);
@@ -119,13 +137,14 @@ public class WeChatEventSourceService extends AccessibilityService {
                 @Override
                 public void onFailure(int errorCode) {
                     ocrBusy.set(false);
-                    CapturePrefs.setStatus(WeChatEventSourceService.this,
-                            "v0.5截图失败 code=" + errorCode);
+                    CapturePrefs.setStatus(WeChatEventSourceService.this, "v0.6截图失败 code=" + errorCode);
+                    if (autoRunning.get()) finishAuto("截图失败，自动采集已停止", true);
                 }
             });
         } catch (Throwable t) {
             ocrBusy.set(false);
-            CapturePrefs.setStatus(this, "v0.5截图异常：" + t.getClass().getSimpleName());
+            CapturePrefs.setStatus(this, "v0.6截图异常：" + t.getClass().getSimpleName());
+            if (autoRunning.get()) finishAuto("截图异常，自动采集已停止", true);
         }
     }
 
@@ -138,20 +157,65 @@ public class WeChatEventSourceService extends AccessibilityService {
         InputImage image = InputImage.fromBitmap(bitmap, 0);
         recognizer.process(image)
                 .addOnSuccessListener(result -> {
-                    int added = storeOcrBlocks(result, bitmap, source);
                     String contact = safeContact();
+                    if (!isTargetChatScreen(result, bitmap.getWidth(), bitmap.getHeight(), contact)) {
+                        lastScreenVerified = false;
+                        CapturePrefs.setStatus(this,
+                                "v0.6等待目标聊天页：请打开「" + contact + "」聊天，识别到标题后才会入库/上翻");
+                        return;
+                    }
+
+                    lastScreenVerified = true;
+                    CaptureSummary summary = storeOcrBlocks(result, bitmap, source);
                     CapturePrefs.setStatus(this,
-                            "v0.5 OCR · 本屏新增 " + added + " 条消息；共 " + db.count(contact) + " 条");
+                            "v0.6 已锁定「" + contact + "」 · 本屏新增 " + summary.addedConversation +
+                                    " 条；消息 " + db.countKind(contact, "message") +
+                                    " · 通话 " + db.countKind(contact, "call") +
+                                    " · 时间锚点 " + db.countKind(contact, "time") +
+                                    (summary.sameScreen ? " · 屏幕未变化×" + sameScreenCount : ""));
+
+                    if (autoRunning.get()) {
+                        if (!autoLoopStarted) {
+                            autoLoopStarted = true;
+                            showPrivacyOverlay();
+                        }
+                        if (sameScreenCount >= 3) {
+                            finishAuto("连续3次屏幕不再变化，已判断到达聊天顶部", true);
+                        } else {
+                            scheduleNextSwipe();
+                        }
+                    }
                 })
-                .addOnFailureListener(e -> CapturePrefs.setStatus(this,
-                        "v0.5 OCR失败：" + e.getClass().getSimpleName()))
+                .addOnFailureListener(e -> {
+                    CapturePrefs.setStatus(this, "v0.6 OCR失败：" + e.getClass().getSimpleName());
+                    if (autoRunning.get()) finishAuto("OCR失败，自动采集已停止", true);
+                })
                 .addOnCompleteListener(task -> {
                     bitmap.recycle();
                     ocrBusy.set(false);
                 });
     }
 
-    private int storeOcrBlocks(Text result, Bitmap bitmap, String source) {
+    private boolean isTargetChatScreen(Text result, int width, int height, String contact) {
+        String target = normalizeForMatch(contact);
+        if (target.isEmpty()) return false;
+        for (Text.TextBlock block : result.getTextBlocks()) {
+            Rect box = block.getBoundingBox();
+            if (box == null) continue;
+            if (box.centerY() > height * 0.115f) continue;
+            if (box.centerX() < width * 0.16f || box.centerX() > width * 0.84f) continue;
+            String text = normalizeForMatch(block.getText());
+            if (!text.isEmpty() && (text.equals(target) || text.contains(target))) return true;
+        }
+        return false;
+    }
+
+    private String normalizeForMatch(String s) {
+        if (s == null) return "";
+        return s.replaceAll("[\\s\\p{Punct}，。！？、·•（）()【】\\[\\]<>《》]", "").trim();
+    }
+
+    private CaptureSummary storeOcrBlocks(Text result, Bitmap bitmap, String source) {
         List<BlockItem> items = new ArrayList<>();
         int width = bitmap.getWidth();
         int height = bitmap.getHeight();
@@ -160,55 +224,99 @@ public class WeChatEventSourceService extends AccessibilityService {
             Rect box = block.getBoundingBox();
             String raw = block.getText() == null ? "" : block.getText().trim();
             if (raw.isEmpty() || box == null) continue;
-            if (box.bottom < height * 0.075f || box.top > height * 0.91f) continue;
+            if (box.bottom < height * 0.075f || box.top > height * 0.92f) continue;
 
             String normalized = normalizeBlockText(raw);
             if (normalized.isEmpty()) continue;
+            if (isAvatarOrEdgeJunk(box, width, height)) continue;
 
             if (isTimeText(normalized)) {
                 items.add(BlockItem.time(normalized, box));
                 continue;
             }
+            if (isUiJunk(normalized)) continue;
 
             BubbleClass bc = classifyBubble(bitmap, box);
-            if (bc.sender.equals("系统/未知")) {
-                // Strict by design: v0.5 only keeps text that actually sits on a likely chat bubble.
-                continue;
+            if (bc.sender.equals("系统/未知")) continue;
+
+            CallInfo call = parseCall(normalized);
+            if (call != null) {
+                items.add(BlockItem.call(normalized, box, bc.sender, bc.confidence,
+                        call.status, call.durationSeconds));
+            } else {
+                items.add(BlockItem.message(normalized, box, bc.sender, bc.confidence));
             }
-            if (isUiJunk(normalized)) continue;
-            items.add(BlockItem.message(normalized, box, bc.sender, bc.confidence));
         }
 
         items.sort(Comparator.comparingInt(a -> a.box.top));
         List<BlockItem> merged = mergeAdjacent(items);
+        String signature = makeScreenSignature(merged);
+        boolean same = signature.equals(lastScreenSignature);
+        if (same) sameScreenCount++; else sameScreenCount = 0;
+
+        // Exact same stable screen is useful for top detection, but not useful as another database copy.
+        if (same) return new CaptureSummary(0, true);
+        lastScreenSignature = signature;
 
         String contact = safeContact();
         String captureId = UUID.randomUUID().toString();
         long capturedAt = System.currentTimeMillis();
         int seq = 0;
-        int addedMessages = 0;
+        int addedConversation = 0;
+        String currentWechatTime = null;
+        Set<String> currentKeys = new HashSet<>();
 
         for (BlockItem item : merged) {
             if (item.kind.equals("time")) {
-                lastWechatTime = item.text;
+                currentWechatTime = item.text;
+                lastVisibleWechatTime = item.text;
                 db.insertRecord(contact, "系统", "time", item.text, item.text,
                         capturedAt, captureId, seq++, item.box.left, item.box.top,
-                        item.box.right, item.box.bottom, 1.0f, source);
-            } else {
-                if (db.insertRecord(contact, item.sender, "message", item.text, lastWechatTime,
-                        capturedAt, captureId, seq++, item.box.left, item.box.top,
-                        item.box.right, item.box.bottom, item.confidence, source)) {
-                    addedMessages++;
-                }
+                        item.box.right, item.box.bottom, 1.0f, source,
+                        null, null, false);
+                continue;
+            }
+
+            String key = recordKey(item);
+            boolean duplicateHint = previousScreenKeys.contains(key);
+            currentKeys.add(key);
+            if (db.insertRecord(contact, item.sender, item.kind, item.text, currentWechatTime,
+                    capturedAt, captureId, seq++, item.box.left, item.box.top,
+                    item.box.right, item.box.bottom, item.confidence, source,
+                    item.callStatus, item.callDurationSeconds, duplicateHint)) {
+                addedConversation++;
             }
         }
-        return addedMessages;
+        previousScreenKeys = currentKeys;
+        return new CaptureSummary(addedConversation, false);
+    }
+
+    private boolean isAvatarOrEdgeJunk(Rect box, int width, int height) {
+        boolean edge = box.centerX() > width * 0.86f || box.centerX() < width * 0.14f;
+        boolean small = box.width() < width * 0.12f && box.height() < height * 0.045f;
+        return edge && small;
+    }
+
+    private String makeScreenSignature(List<BlockItem> items) {
+        StringBuilder sb = new StringBuilder();
+        for (BlockItem i : items) {
+            if (i.kind.equals("time") || i.kind.equals("call") || i.kind.equals("message")) {
+                sb.append(i.kind).append('|').append(i.sender).append('|')
+                        .append(normalizeForMatch(i.text)).append('|')
+                        .append(i.box.top / 40).append(';');
+            }
+        }
+        return Integer.toHexString(sb.toString().hashCode());
+    }
+
+    private String recordKey(BlockItem item) {
+        return item.kind + "|" + item.sender + "|" + normalizeForMatch(item.text);
     }
 
     private List<BlockItem> mergeAdjacent(List<BlockItem> items) {
         List<BlockItem> out = new ArrayList<>();
         for (BlockItem cur : items) {
-            if (cur.kind.equals("time")) {
+            if (!cur.kind.equals("message")) {
                 out.add(cur);
                 continue;
             }
@@ -280,11 +388,36 @@ public class WeChatEventSourceService extends AccessibilityService {
         return TIME_PATTERN.matcher(x).matches();
     }
 
+    private CallInfo parseCall(String text) {
+        String x = text.replace(" ", "").replace("　", "");
+        if (x.contains("通话时长")) {
+            Matcher m = CALL_DURATION_PATTERN.matcher(text);
+            Integer seconds = null;
+            if (m.find()) {
+                try {
+                    int mm = Integer.parseInt(m.group(1));
+                    int ss = Integer.parseInt(m.group(2));
+                    if (ss < 60) seconds = mm * 60 + ss;
+                } catch (Exception ignored) {}
+            }
+            return new CallInfo("completed", seconds);
+        }
+        if (x.contains("无应答") || x.contains("未接听") || x.contains("无人接听"))
+            return new CallInfo("no_answer", null);
+        if (x.contains("已取消") || x.contains("取消通话"))
+            return new CallInfo("cancelled", null);
+        if (x.contains("已拒绝") || x.contains("拒绝通话"))
+            return new CallInfo("rejected", null);
+        if (x.contains("忙线")) return new CallInfo("busy", null);
+        if (x.contains("语音通话") || x.contains("视频通话")) return new CallInfo("call", null);
+        return null;
+    }
+
     private boolean isUiJunk(String text) {
         if (text.equals(safeContact())) return true;
         String[] exact = {
                 "微信", "通讯录", "发现", "我", "发送", "按住说话", "按住 说话", "语音输入",
-                "表情", "搜索", "更多", "视频号", "朋友圈", "返回", "相册", "拍摄"
+                "表情", "搜索", "更多", "视频号", "朋友圈", "返回", "相册", "拍摄", "+", "开"
         };
         for (String x : exact) if (text.equals(x)) return true;
         return text.matches("^(?:[0-9]{1,3}%|[0-9]{1,2}:[0-9]{2}\\s*[A-Z]{0,3})$");
@@ -320,8 +453,6 @@ public class WeChatEventSourceService extends AccessibilityService {
 
         if (green >= 2 && green >= white) return new BubbleClass("我", green / (float) usable);
         if (white >= 3 && white > green) return new BubbleClass("对方", white / (float) usable);
-
-        // Conservative geometric fallback only when the block is strongly lateral.
         if (textBox.left > w * 0.48f) return new BubbleClass("我", 0.45f);
         if (textBox.right < w * 0.58f) return new BubbleClass("对方", 0.45f);
         return new BubbleClass("系统/未知", 0.0f);
@@ -363,76 +494,126 @@ public class WeChatEventSourceService extends AccessibilityService {
 
     public void startAuto(int pages) {
         CapturePrefs.setEnabled(this, true);
-        autoMax = Math.max(1, Math.min(300, pages));
+        autoMax = Math.max(1, Math.min(600, pages));
         autoPage = 0;
         swipeScheduled = false;
+        autoLoopStarted = false;
+        lastScreenVerified = false;
+        lastScreenSignature = null;
+        sameScreenCount = 0;
+        previousScreenKeys = new HashSet<>();
         autoRunning.set(true);
-        CapturePrefs.setStatus(this, "v0.5自动OCR已待命：切回微信聊天页后开始");
-        handler.postDelayed(() -> {
-            if (System.currentTimeMillis() - lastWechatEventAt < 5000) {
-                requestOcrScreenshot("自动开始");
-                scheduleNextSwipe();
-            }
-        }, 1200);
+        removePrivacyOverlay();
+        CapturePrefs.setStatus(this,
+                "v0.6无人值守已待命：现在只需打开「" + safeContact() + "」聊天页，锁定标题后会自动变暗并一直向上采集");
     }
 
     public void stopAuto() {
-        autoRunning.set(false);
-        swipeScheduled = false;
-        CapturePrefs.setStatus(this, "v0.5已停止自动OCR");
+        finishAuto("已手动停止无人值守采集", false);
     }
 
     private void scheduleNextSwipe() {
-        if (!autoRunning.get() || swipeScheduled) return;
+        if (!autoRunning.get() || swipeScheduled || !lastScreenVerified) return;
         if (autoPage >= autoMax) {
-            autoRunning.set(false);
-            CapturePrefs.setStatus(this, "v0.5自动采集完成，共翻 " + autoPage + " 页");
+            finishAuto("达到设定最大页数 " + autoMax + "，已停止", true);
             return;
         }
         swipeScheduled = true;
         handler.postDelayed(() -> {
             swipeScheduled = false;
-            if (!autoRunning.get()) return;
-            if (System.currentTimeMillis() - lastWechatEventAt > 6000) {
-                CapturePrefs.setStatus(this, "v0.5等待微信聊天页回到前台");
-                scheduleNextSwipe();
-                return;
-            }
+            if (!autoRunning.get() || !lastScreenVerified) return;
             dispatchOlderSwipe();
-        }, 1500);
+        }, 1250);
     }
 
     private void dispatchOlderSwipe() {
         int w = getResources().getDisplayMetrics().widthPixels;
         int h = getResources().getDisplayMetrics().heightPixels;
         Path p = new Path();
-        p.moveTo(w * 0.50f, h * 0.35f);
-        p.lineTo(w * 0.50f, h * 0.78f);
-        GestureDescription.StrokeDescription stroke = new GestureDescription.StrokeDescription(p, 0, 430);
+        p.moveTo(w * 0.50f, h * 0.34f);
+        p.lineTo(w * 0.50f, h * 0.80f);
+        GestureDescription.StrokeDescription stroke = new GestureDescription.StrokeDescription(p, 0, 470);
         GestureDescription gesture = new GestureDescription.Builder().addStroke(stroke).build();
         dispatchGesture(gesture, new GestureResultCallback() {
             @Override public void onCompleted(GestureDescription gestureDescription) {
                 autoPage++;
-                handler.postDelayed(() -> {
-                    requestOcrScreenshot("自动第" + autoPage + "页");
-                    scheduleNextSwipe();
-                }, 900);
+                handler.postDelayed(() -> requestOcrScreenshot("自动第" + autoPage + "页"), 850);
             }
 
             @Override public void onCancelled(GestureDescription gestureDescription) {
-                autoRunning.set(false);
-                CapturePrefs.setStatus(WeChatEventSourceService.this, "v0.5自动上翻被系统取消");
+                finishAuto("自动上翻被系统取消", true);
             }
         }, null);
     }
 
+    private void showPrivacyOverlay() {
+        if (privacyOverlay != null) return;
+        try {
+            windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+            privacyOverlay = new View(this);
+            privacyOverlay.setBackgroundColor(Color.BLACK);
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
+                            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
+                            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL |
+                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN |
+                            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                    PixelFormat.TRANSLUCENT);
+            // Almost transparent in screenshots, while requesting minimum physical display brightness.
+            lp.alpha = 0.01f;
+            lp.screenBrightness = 0.02f;
+            windowManager.addView(privacyOverlay, lp);
+        } catch (Throwable ignored) {
+            privacyOverlay = null;
+        }
+    }
+
+    private void removePrivacyOverlay() {
+        if (privacyOverlay != null && windowManager != null) {
+            try { windowManager.removeView(privacyOverlay); } catch (Throwable ignored) {}
+        }
+        privacyOverlay = null;
+        windowManager = null;
+    }
+
+    private void finishAuto(String reason, boolean vibrate) {
+        autoRunning.set(false);
+        autoLoopStarted = false;
+        swipeScheduled = false;
+        removePrivacyOverlay();
+        if (reason != null) CapturePrefs.setStatus(this, "v0.6 " + reason + "；共自动翻 " + autoPage + " 页");
+        if (vibrate) signalDone();
+    }
+
+    private void signalDone() {
+        try {
+            Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+            if (v == null) return;
+            if (Build.VERSION.SDK_INT >= 26) {
+                v.vibrate(VibrationEffect.createWaveform(new long[]{0, 180, 100, 180}, -1));
+            } else {
+                v.vibrate(350);
+            }
+        } catch (Throwable ignored) {}
+    }
+
     public String dumpTree() {
-        return "# WeChat Readonly v0.5\n"
-                + "# mode=Accessibility screenshot + ML Kit Chinese OCR + bubble-color sender classification\n"
+        String contact = safeContact();
+        return "# WeChat Readonly v0.6\n"
+                + "# mode=verified target chat + unattended screenshot OCR + bubble sender + call parser\n"
+                + "# target_contact=" + contact + "\n"
+                + "# last_screen_verified=" + lastScreenVerified + "\n"
+                + "# auto_running=" + autoRunning.get() + "\n"
+                + "# auto_page=" + autoPage + "/" + autoMax + "\n"
+                + "# same_screen_count=" + sameScreenCount + "\n"
                 + "# last_wechat_event_at=" + lastWechatEventAt + "\n"
-                + "# last_wechat_time=" + (lastWechatTime == null ? "" : lastWechatTime) + "\n"
-                + "# messages_for_contact=" + (db == null ? 0 : db.count(safeContact())) + "\n"
-                + "# all_records_for_contact=" + (db == null ? 0 : db.countAll(safeContact())) + "\n";
+                + "# last_visible_wechat_time=" + (lastVisibleWechatTime == null ? "" : lastVisibleWechatTime) + "\n"
+                + "# messages=" + (db == null ? 0 : db.countKind(contact, "message")) + "\n"
+                + "# calls=" + (db == null ? 0 : db.countKind(contact, "call")) + "\n"
+                + "# time_anchors=" + (db == null ? 0 : db.countKind(contact, "time")) + "\n";
     }
 
     private static final class BubbleClass {
@@ -444,12 +625,32 @@ public class WeChatEventSourceService extends AccessibilityService {
         }
     }
 
+    private static final class CallInfo {
+        final String status;
+        final Integer durationSeconds;
+        CallInfo(String status, Integer durationSeconds) {
+            this.status = status;
+            this.durationSeconds = durationSeconds;
+        }
+    }
+
+    private static final class CaptureSummary {
+        final int addedConversation;
+        final boolean sameScreen;
+        CaptureSummary(int addedConversation, boolean sameScreen) {
+            this.addedConversation = addedConversation;
+            this.sameScreen = sameScreen;
+        }
+    }
+
     private static final class BlockItem {
         String kind;
         String text;
         Rect box;
         String sender;
         float confidence;
+        String callStatus;
+        Integer callDurationSeconds;
 
         static BlockItem time(String text, Rect box) {
             BlockItem i = new BlockItem();
@@ -468,6 +669,19 @@ public class WeChatEventSourceService extends AccessibilityService {
             i.box = new Rect(box);
             i.sender = sender;
             i.confidence = confidence;
+            return i;
+        }
+
+        static BlockItem call(String text, Rect box, String sender, float confidence,
+                              String status, Integer durationSeconds) {
+            BlockItem i = new BlockItem();
+            i.kind = "call";
+            i.text = text;
+            i.box = new Rect(box);
+            i.sender = sender;
+            i.confidence = confidence;
+            i.callStatus = status;
+            i.callDurationSeconds = durationSeconds;
             return i;
         }
     }
