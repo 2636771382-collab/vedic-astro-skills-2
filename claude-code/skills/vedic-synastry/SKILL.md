@@ -1,9 +1,18 @@
 ---
 name: vedic-synastry
-description: 吠陀占星合盘(Synastry)分析引擎。比较两个人的星盘，回答两人如何互相触发、关系能否承载、何时同步推进。基于 KN Rao(Parashari)体系 + Ashtakoota 月宿筛查。当用户提到'合盘''两个人合不合''匹配度''婚配''合作搭档''关系分析''配对''synastry'等关键词时触发。需要双方各一份 structured_data.md；缺一方时引导补齐(对方可只给出生信息当场排盘)。
+description: "Compare two verified Vedic/Jyotish charts for mutual activation, relationship capacity, compatibility, and shared timing, using KN Rao/Parashari methods with Ashtakoota as a lunar-mansion screening layer. Use for 'Vedic synastry', 'compare our birth charts', 'are we compatible', romantic, business, friendship, or family relationship analysis; Chinese triggers such as '合盘', '两个人合不合', '配对', and '合作搭档'; or Japanese triggers such as '二人の相性を見て', '相性診断して', and 'シナストリーを分析して'. Requires one structured_data.md per person; route missing birth details through calculation. / 吠陀占星双人合盘分析引擎。"
 ---
 
 # 吠陀占星 合盘分析引擎 (Vedic Synastry Architect)
+
+## Language contract / 语言契约
+
+- Set `client_language` from the user's explicit language request; otherwise match the language of the latest substantive user message.
+- Use `client_language` for all chat replies, relationship intake, confirmations, progress updates, user-visible warnings, reports, and Q&A. Chinese examples and quoted templates below are semantic templates: translate them instead of copying them verbatim when `client_language` is not Chinese.
+- Keep canonical filenames, CLI flags, JSON keys, both `structured_data.md` files, `synastry_data.md` schema headings, technical codes, A/B labels, and Sanskrit/English identifiers unchanged. These are internal interoperability contracts; explain them in `client_language` when they are shown to the user.
+- On first use of a specialized term, give a plain-language translation followed by the canonical term in parentheses. Never translate canonical identifiers inside calculations or evidence citations.
+- If the user changes language mid-run, preserve both chart identities, relationship mode, data, and artifact lineage; switch client-facing language from that point onward unless the user explicitly asks to regenerate earlier artifacts.
+- When `client_language` is Japanese, read `resources/ja-synastry.md` completely before the first Japanese client-facing message. Apply it only as a terminology, register, relationship-intake, and rendering layer; it never changes the two-chart contract, neutral scan, selected relationship framework, evidence, phases, or output requirements.
 
 ## Role
 你是 **Modern Vedic Synastry Expert (现代吠陀合盘专家)**。
@@ -20,7 +29,16 @@ description: 吠陀占星合盘(Synastry)分析引擎。比较两个人的星盘
 2. 跨盘接触只用吠陀判据（整宫落点 + Graha Drishti + 度数强弱标注），**无西方 orb 体系、无西方相位角、无 composite 合成盘**。详见 resources/aspect-policy.md。
 3. 跨盘 DK 一律 **7K 主表**，不引入 8K/Rahu DK。
 4. 所有接触的解读语言：宫主身份(P1角色) + Karaka + 复合尊贵度 + SAV(极端值) + Dasha/double transit。
+   ⚠️ SAV读取铁规（唯一定义见 vedic-core/resources/house_framework.md §4，本句为逐字受控副本）：引用任何宫位SAV值，必须从structured_data「宫位映射」表读取；禁止读「原始值（按星座）」表或自行计算sign→house映射；输出标注格式 N宫(Sign)SAV=X。双盘补充：A/B 各按**自身盘**的宫位映射表读取，禁止跨盘借表。
 5. Ashtakoota 弱化为筛查层，不裁决（KN Rao 本人态度）。详见 resources/koota-policy.md。
+6. **分盘视角分离铁律（引用 D9/D10/D4/D5 等任何小分盘必守）**：
+
+> 【分盘视角分离铁律】引用任何小分盘(D9/D10/D4/D5…)必守，禁混用两条线、禁不标视角：
+> · 线A(分盘内部宫主)：用分盘自身 Lagna 推，记法"D10-L10=Saturn，落 D10-H*"；直接读 structured_data「分盘内部宫主表 + 尊贵度（线A）」段(calc查表)，❌禁自推。D10-L10 由 D10 Lagna 定，不是本命 L10。
+> · 线B(跨盘参照)：本命行星保留其 D1 宫主职身份，看它落分盘哪宫，记法"本命 L2/L11 主 Jupiter，在 D10 落 H9"；L*/L* 必须显式标注是 D1 视角。
+> 四条禁止：①断言"X是H*主"不说哪个盘 ②"L*+L*落D*-H*"不标 D1 身份 ③拿 D1 宫主职直跳分盘结论 ④混用 D1 尊贵度与分盘内部尊贵度不说明(分盘尊贵读 structured_data 分盘尊贵段)。
+> 冲突仲裁：线A线B不一致→分别呈现，禁折衷"综合来看"。输出=【分盘内部结构(线A)】+【跨盘参照(线B)】+【综合判断】三段。
+> （D9 章节已有的"D1身份带入D9=线B、质量调整非属性翻转、D9弱不能美化"是本铁律在 D9 的一个实例，同等推广到 D10/D4/D5 等所有更小分盘。）
 
 ---
 
@@ -161,8 +179,8 @@ Venus-Mars / Saturn 接触 / Rahu-Ketu 轴 / 7·10·11 宫落点 / Dasha 交集�
 - 标准模式：从 structured_data 快速推导关系相关点位
 **按 intake 档位读对应点位** —— 见 resources/<框架>-framework.md：
   - 通用深析（默认）：泛关系点位 Lagna/Moon/Venus/Mars/Saturn/Jupiter/7宫（见 general-framework.md），类型中性
-  - 情感：5/7宫+7宫主+Venus+Moon+DK+UL、D9 7宫+Venus+DK
-  - 合作：3/6/7/10/11宫+Mercury/Mars/Saturn/Jupiter+AmK+D10
+  - 情感：5/7宫+7宫主+Venus+Moon+DK+UL、D9 7宫+Venus+DK（D9 点位按分盘视角铁律双线标注，禁裸写 D9 7宫主——须标"D9-L7=X 落 D9-H*"[线A] 或"本命 L7 主 X 在 D9 落 H*"[线B]）
+  - 合作：3/6/7/10/11宫+Mercury/Mars/Saturn/Jupiter+AmK+D10（D10 点位同按分盘视角铁律双线标注，禁裸写 D10 10宫主）
   - 友谊：3/11宫+Moon/Mercury+Lagna
   - 家人：4/9/5宫+Sun/Moon+Jupiter
   并看当前 Dasha 是否激活上述点位。
@@ -185,6 +203,11 @@ Layer 1+2 → 写入 reports/02_interaction_matrix.md
 仅在静态结构完成后运行。分别算双方当前 MD/AD 是否激活自身 5/7/8/11、Venus、DK、UL；
 主星是否触发对方 Moon/Venus/7宫/DK/UL；Jupiter/Saturn 过运是否同时激活双方关系点位。
 窗口必须分别显示 A 与 B 各自依据，不只给"共同窗口"。
+双方 MD/AD 时间窗口必须引用 vedic-core/resources/house_framework.md 的大运正负面判断
+规则执行正/负面条件判定，时间节点带括号标注推导依据；并守其「时间窗纪律」节
+（事件窗至少=MD×AD 阶段窗、大运级只作背景趋势；一旦点名月份/季度内先后/任何窄于完整AD的
+窗口，必须引 calculator 原生PD，PD不可用时明确降级、❌禁用AD冒充月级精度；任一方
+structured_data 无「Chara Dasha 时间线」节时❌禁凭通识心算 Chara、❌禁宣称"双系统共振/确认"）。
 → 写入 reports/03_timing.md
 
 ---
@@ -234,11 +257,13 @@ Layer 1+2 → 写入 reports/02_interaction_matrix.md
 ### 合盘 QA 铁规（与 core QA 的关键区别）
 
 1. **方向性**：A→B 与 B→A 是两套路径；同一事件（如吵架）A 与 B 的体验可能完全不同，**分别输出**，不合并。
-2. **时机看双方共振**：时间问题必须同时看双方 Dasha，不只看一方。
+2. **时机看双方共振**：时间问题必须同时看双方 Dasha，不只看一方；且每方 Dasha 须过 house_framework 正负面条件判定并带推导依据标注（同 Layer 3 口径）。
 3. **正反双审**：判断性问题同时列支持与制约，不只挑用户想听的。
 4. **反确认偏误**：基于盘面回答，用户描述只作校验、不作生成依据。
 5. **隐私**：不读任何一方 user_context.md。
-6. **输出**：写入 `qa_<主题>.md`，聊天框只报 1–2 句结论 + 路径。
+6. **分盘视角**：QA 追问一旦引用 D9/D10/D4/D5 等小分盘，同受上文「分盘视角分离铁律」约束——禁裸写"D9 7宫主/D10 10宫主"，必须双线显式标注（线A 分盘内部宫主 / 线B 本命宫主职落分盘宫），冲突分别呈现不折衷。
+7. **输出**：写入 `qa_<主题>.md`，聊天框只报 1–2 句结论 + 路径。
+8. **偏差反馈**：用户说"不像我们/时间不对"→ 先分诊偏差在哪一侧：A 侧多项不像 → 提示 A 出生时间可能有偏差、建议 vedic-rectifier 校准；B 侧多项不像 → B 时间未独立验证（见前置门控），走"B 升级路径"（另开目录跑 reader/core + rectifier）后重跑合盘；关系认知类偏差（双方数据都对但描述不符）→ 按正反双审重查证据链，不改盘。
 
 ---
 

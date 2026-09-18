@@ -40,6 +40,12 @@ def _setup():
         orig_he = swe.houses_ex
         if not hasattr(orig_he, '_patched'):
             def patch_he(*a, **kw):
+                # PyJHora drik.ascendant() 不传 hsys → pyswisseph 默认落到 Placidus，
+                # 而 Placidus 在极圈内(|lat|>66°33')无解，houses_ex 直接报错、整张盘算不出。
+                # 补 b'W'(整宫制，与 engine.calc_lagna 同口径)：asc 值与宫制无关
+                # (实测 W/E/O/C/B 返回同一 asc)，中低纬度 A/B 逐字节零变化。
+                if len(a) < 4 and 'hsys' not in kw:
+                    a = a + (b'W',)
                 r = orig_he(*a, **kw)
                 return (r[0], r[1]) if len(r) == 3 else r
             patch_he._patched = True
@@ -92,6 +98,35 @@ def calculate_bhava_bala(year, month, day, hour, minute, lat, lon, tz_offset):
                 for h in range(12):
                     result[h + 1] = {'total': round(bb[h], 2)}
         return result
+    except Exception as e:
+        return {'error': str(e)}
+
+
+def calculate_pushkara(year, month, day, hour, minute, lat, lon, tz_offset):
+    """
+    计算 Pushkara Navamsa / Pushkara Bhaga（落陷补丁维度，S3-07）。
+    行星落在 Pushkara Navamsa 区段 = 受滋养保护，受损行星有恢复力缓冲。
+
+    Returns:
+        dict: {'pushkara_navamsa': ['Mars', ...], 'pushkara_bhaga': ['Venus', ...]}
+        失败时 {'error': str}
+    """
+    swe, const, drik = _setup()
+    from jhora.panchanga.drik import Place, Date
+    from jhora.horoscope.chart import charts
+    from jhora import utils
+
+    _PLANETS = ['Sun', 'Moon', 'Mars', 'Mercury', 'Jupiter',
+                'Venus', 'Saturn', 'Rahu', 'Ketu']
+    try:
+        jd = utils.julian_day_number(Date(year, month, day), (hour, minute, 0))
+        place = Place('birth_place', lat, lon, tz_offset)
+        pp = charts.rasi_chart(jd, place)
+        nav_idx, bhaga_idx = charts.planets_in_pushkara_navamsa_bhaga(pp)
+        to_names = lambda idxs: [_PLANETS[i] for i in idxs
+                                 if isinstance(i, int) and 0 <= i < len(_PLANETS)]
+        return {'pushkara_navamsa': to_names(nav_idx),
+                'pushkara_bhaga': to_names(bhaga_idx)}
     except Exception as e:
         return {'error': str(e)}
 

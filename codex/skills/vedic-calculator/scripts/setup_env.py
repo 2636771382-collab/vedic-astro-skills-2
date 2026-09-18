@@ -10,10 +10,9 @@ setup_env.py — vedic-calculator 环境自动搭建脚本
 安装顺序（关键！）：
   1. pysweph>=2.10.3.5     — 提供 swisseph module（社区活跃 fork，有 cp38~cp313 wheel）
   2. PyJHora 隐藏依赖       — numpy, geocoder, geopy, requests, timezonefinder（PyJHora 未声明！）
-  3. dashaflow>=0.3 --no-deps  — 跳过其对已停更的 pyswisseph 的声明依赖
-  4. PyJHora==4.8.6        — SAV/BAV + Shadbala + 分盘
-  5. pytz>=2024.1          — 时区
-  6. 修复 ephemeris 数据    — PyJHora pip 包缺少 .se1 星历文件，从 pysweph 复制
+  3. PyJHora==4.8.6        — SAV/BAV + Shadbala + 分盘
+  4. pytz>=2024.1          — 时区
+  5. 修复 ephemeris 数据    — PyJHora pip 包缺少 .se1 星历文件，从 pysweph 复制
 """
 
 import subprocess
@@ -36,8 +35,7 @@ REQUIRED_PACKAGES = [
     ("requests", "", []),                               # 6. PyJHora 隐藏依赖
     ("timezonefinder", "", []),                         # 7. PyJHora 隐藏依赖
     ("python-dateutil", "", []),                        # 8. PyJHora 隐藏依赖
-    ("dashaflow", ">=0.3", ["--no-deps"]),             # 9. 跳过 pyswisseph 依赖
-    ("PyJHora", "==4.8.6", []),                        # 10. SAV/BAV + Shadbala + 分盘
+    ("PyJHora", "==4.8.6", []),                        # 9. SAV/BAV + Shadbala + 分盘
 ]
 
 MIN_PYTHON = (3, 8)
@@ -181,14 +179,21 @@ if glob.glob(os.path.join(jhora_ephe, '*.se1')):
 
 SE1_NAMES = ['seas_18.se1', 'semo_18.se1', 'sepl_18.se1']
 
-# 优先级1: 从仓库自带的 scripts/ephe/ 复制
+# 优先级1: 从仓库自带的 scripts/ephe/ 复制（兼容 .se1 与 .se1.txt——
+#          redskill 分发包为过审把 .se1 编码成 .se1.txt，这里自动解码还原真名）
 bundled = r'{bundled_ephe}'
 if os.path.isdir(bundled):
-    found = [f for f in SE1_NAMES if os.path.exists(os.path.join(bundled, f))]
-    if found:
-        os.makedirs(jhora_ephe, exist_ok=True)
-        for f in found:
-            shutil.copy2(os.path.join(bundled, f), os.path.join(jhora_ephe, f))
+    os.makedirs(jhora_ephe, exist_ok=True)
+    copied = []
+    for name in SE1_NAMES:
+        for src_name in (name, name + '.txt'):
+            src = os.path.join(bundled, src_name)
+            if os.path.exists(src):
+                shutil.copy2(src, os.path.join(jhora_ephe, name))
+                copied.append(name)
+                break
+    if copied:
+        for f in copied:
             print(f'Copied (bundled): {{f}}')
         sys.exit(0)
 
@@ -237,7 +242,6 @@ def validate(venv_dir):
     # 1. 基础 import 检查
     checks = [
         ("swisseph", "import swisseph as swe; print(swe.version)"),
-        ("dashaflow", "import dashaflow; print('OK')"),
         ("jhora", "import jhora; print('OK')"),
         ("pytz", "import pytz; print('OK')"),
     ]

@@ -1,9 +1,18 @@
 ---
 name: vedic-love
-description: 吠陀占星(Vedic/Jyotish)恋爱时机分析引擎。当用户提供星盘PDF、截图或文本数据，并要求进行恋爱运势、感情分析、桃花时机分析时触发此技能。也在用户提到"恋爱运势"、"桃花时机"、"感情分析"、"吠陀恋爱"、"5宫/7宫分析"、"PK/DK分析"、"Upapada"等关键词时触发。
+description: "Analyze relationship patterns, emotional needs, partnership capacity, and relationship timing from a verified Vedic/Jyotish chart. Use for 'Vedic love reading', 'relationship patterns in my chart', 'when might a relationship begin', 5th/7th-house, PK/DK, Upapada or D9 questions; Chinese requests such as '感情分析', '恋爱运势', or '桃花时机'; and Japanese requests such as '恋愛運を見て', '恋愛傾向を分析して', or '恋愛のタイミングを知りたい'. / 吠陀占星关系与恋爱时机分析引擎。"
 ---
 
 # 吠陀恋爱时机分析引擎 (Vedic Love Timing Architect)
+
+## Language contract / 语言契约
+
+- Set `client_language` from the user's explicit language request; otherwise match the language of the latest substantive user message.
+- Use `client_language` for all chat replies, intake questions, confirmations, progress updates, user-visible warnings, reports, and Q&A. Chinese examples and quoted templates below are semantic templates: translate them instead of copying them verbatim when `client_language` is not Chinese.
+- Keep canonical filenames, CLI flags, JSON keys, `structured_data.md` schema headings, technical codes, and Sanskrit/English identifiers unchanged. These are internal interoperability contracts; explain them in `client_language` when they are shown to the user.
+- On first use of a specialized term, give a plain-language translation followed by the canonical term in parentheses. Never translate canonical identifiers inside calculations or evidence citations.
+- If the user changes language mid-run, preserve the existing data and artifact lineage; switch client-facing language from that point onward unless the user explicitly asks to regenerate earlier artifacts.
+- When `client_language` is Japanese, read `resources/ja-love.md` completely before the first Japanese client-facing message. Apply it only as a terminology, register, intake, and rendering layer; it never changes the relationship workflow, evidence, timing rules, phases, or output requirements.
 
 ## 概述
 
@@ -102,14 +111,11 @@ description: 吠陀占星(Vedic/Jyotish)恋爱时机分析引擎。当用户提�
 - D9完整数据和可信度标注
 - 性别和感情状态（reader已收集）
 - Chara Karakas（7K主表，特别关注PK和DK）
-- 预分析（尊贵度、相位关系）
+- 预分析（尊贵度、Graha Drishti 宫位照射）
 - Dasha时间线
 - UL/AL位置（如reader已提取）
 
-⚠️ SAV读取铁规：
-  引用任何宫位的SAV值时，必须从structured_data的"宫位映射"表读取。
-  禁止从"原始值（按星座）"表读取或自行计算sign→house映射。
-  输出时必须标注对应星座，格式：N宫(Sign)SAV=X
+⚠️ SAV读取铁规（唯一定义见 vedic-core/resources/house_framework.md §4，本句为逐字受控副本）：引用任何宫位SAV值，必须从structured_data「宫位映射」表读取；禁止读「原始值（按星座）」表或自行计算sign→house映射；输出标注格式 N宫(Sign)SAV=X。
   例："7宫(Ta)SAV=28" "5宫(Pi)SAV=26"
 
 ## 分析流程
@@ -137,7 +143,7 @@ description: 吠陀占星(Vedic/Jyotish)恋爱时机分析引擎。当用户提�
 **数据引用:**
 - 5宫/7宫主 → structured_data 预分析·宫主表
 - 行星状态 → structured_data 预分析·Shadbala + 尊贵度
-- 相位 → structured_data 预分析·相位关系
+- 相位 → structured_data 预分析·Graha Drishti（宫位照射，非西占 orb）
 - 性别 → structured_data 用户信息（reader已收集）
 - D9数据 → structured_data D9表
 
@@ -146,12 +152,12 @@ description: 吠陀占星(Vedic/Jyotish)恋爱时机分析引擎。当用户提�
 **5宫(恋爱宫)审计:**
 - 5宫主星落点 → 从宫主表读取
 - 5宫内星(Occupants) → 直接着色恋爱风格
-- 对5宫的相位 → 从相位关系表读取
+- 对5宫的相位（谁照射5宫）→ 从 structured_data「Graha Drishti」表读取（吠陀宫位照射，非西占 orb）
 
 **7宫(伴侣宫)审计:**
 - 7宫主星落点 → 从宫主表读取
 - 7宫内星 → 伴侣特质
-- 对7宫的相位 → 从相位关系表读取
+- 对7宫的相位（谁照射7宫）→ 从 structured_data「Graha Drishti」表读取（吠陀宫位照射，非西占 orb）
 
 **特别关注（引用预分析数据）:**
 - Rahu影响5/7宫? → 暗示网恋、非传统关系；Rahu影响过强需警告"容易被表象迷惑，遇到不靠谱的对象"
@@ -167,6 +173,14 @@ description: 吠陀占星(Vedic/Jyotish)恋爱时机分析引擎。当用户提�
 
 #### 2. D9(九分盘)灵魂质量审计
 
+> **【分盘视角分离铁律】** 引用任何小分盘(D9/D10/D4/D5…)必守，禁混用两条线、禁不标视角：
+> · 线A(分盘内部宫主)：用分盘自身 Lagna 推，记法"D9-L7=Venus，落 D9-H*"；直接读 structured_data「分盘内部宫主表 + 尊贵度（线A）」段(calc查表)，❌禁自推。D9-L7 由 D9 Lagna 定，不是本命 L7。
+> · 线B(跨盘参照)：本命行星保留其 D1 宫主职身份，看它落分盘哪宫，记法"本命 L2/L11 主 Jupiter，在 D9 落 H9"；L*/L* 必须显式标注是 D1 视角。
+> · 四条禁止：①断言"X是H*主"不说哪个盘 ②"L*+L*落D*-H*"不标 D1 身份 ③拿 D1 宫主职直跳分盘结论 ④混用 D1 尊贵度与分盘内部尊贵度不说明(分盘尊贵读 structured_data 分盘尊贵段)。
+> · 冲突仲裁：线A线B不一致→分别呈现，禁折衷"综合来看"。输出=【分盘内部结构(线A)】+【跨盘参照(线B)】+【综合判断】三段。
+> · 尊贵度层级：讨论行星的 D9 质量，必须用 D9 内部尊贵度（读 structured_data 分盘尊贵段），与 D1 尊贵度分开标注，禁止拿 D1 尊贵直接当 D9 质量。
+> · 本铁律就地固化，不依赖"如有"条件引用 core——quick 模式也须遵守。
+
 **数据来源:** structured_data D9表（公式验证10/10）+ core p3a_d9（如有，含D9逐星深度审计）
 
 **关键指标:** D1的5宫主在D9的落点
@@ -175,9 +189,11 @@ description: 吠陀占星(Vedic/Jyotish)恋爱时机分析引擎。当用户提�
 - 天蝎/8宫特质 → 强烈占有欲
 
 **D9 7宫审计（新增深度）:**
-- D9 7宫主和宫内星 → 婚姻深层品质
-- D9 Venus位置 → 情感表达的真实模式
-- D1 DK在D9的落点 → 配偶灵魂特质
+- 线A｜D9-L7（从 D9 Lagna 推的 D9 第7宫主）落点 + D9 第7宫宫内星（读 structured_data 分盘内部宫主表）→ 婚姻深层品质。其质量用 D9 内部尊贵度评（读分盘尊贵段），❌禁用 D1 尊贵度顶替
+- 线B｜本命 L7(D1 视角的第7宫主) 在 D9 的落宫 → 本命伴侣事项在灵魂层的落点（标明是 D1 身份带入 D9）
+- D9 Venus位置（其 D9 内部尊贵度另标）→ 情感表达的真实模式
+- 线B｜D1 DK 在 D9 的落点（DK 是 D1 Chara Karaka 身份）→ 配偶灵魂特质
+- 线A线B冲突时分别呈现，禁折衷"综合来看"
 
 **结论:** 预判盘主会吸引**滋养型**还是**消耗型**伴侣
 
@@ -204,11 +220,13 @@ description: 吠陀占星(Vedic/Jyotish)恋爱时机分析引擎。当用户提�
 
 #### B系统：Jaimini Chara Dasha (环境层)
 
-检查当前星座大运(如structured_data中有):
+（Chara Dasha 交叉验证——KN Rao 双系统方法。calc 已实现（chara_dasha.py，经 JHora 双盘金标准 24/24 验证），数据在 structured_data"Chara Dasha 时间线"节。❌ 该节缺失时禁止凭通识心算 Chara Dasha。）
+
+仅当 structured_data 含 Chara Dasha 段时执行:
 1. 星座是否投射到D1的5宫或7宫?
 2. 星座守护星是否关联PK(恋爱)或DK(伴侣)?
 
-**共振点:** A+B同时激活 = 高概率窗口
+**共振点:** A+B同时激活 = 高概率窗口；无 Chara Dasha 数据时只用A系统，不得宣称"双系统共振"
 
 ### ❗ Dasha时间节点硬约束
 
@@ -218,6 +236,10 @@ description: 吠陀占星(Vedic/Jyotish)恋爱时机分析引擎。当用户提�
 - 时间节点必须带括号标注推导依据：
   ✅ "2028-2031年是感情窗口期（Venus=L2+L9, 入庙, 正面3/负面0→正面期）"
   ❌ "2028-2031年是感情窗口期"（无推导依据）
+- 时间窗纪律（见 house_framework「时间窗纪律」节，一并执行）：凡"桃花期/窗口期"等
+  事件性措辞至少落 MD×AD 阶段窗（引速查表AD行/时间轴分行）；一旦点名月份/季度内先后/
+  任何窄于完整AD的窗口，必须引 calculator 原生PD，PD不可用时明确降级、❌禁用AD冒充月级
+  精度；大运级信号只写"背景趋势期"；回顾过去感情 Dasha 必须双向列正负面表现
 
 ---
 
@@ -241,6 +263,11 @@ description: 吠陀占星(Vedic/Jyotish)恋爱时机分析引擎。当用户提�
 ```
 1. 恋爱体质报告（风格定义 + D9深度评估 + 5/7宫分析）
 2. 配偶画像（DK/UL/7宫主→什么样的人）
+   约束：画像必须明示"符号推演，非实人档案"（用大白话说，如"盘面只能勾出对方的气质轮廓，具体是谁得你自己去认"，❌禁写"注：本画像为符号推演"式元声明；此免责全画像只说一次）；
+   以结构信号为主（落宫/星座→来源方向/相识场景/形态族）；每个符号给2-3种可能形态，
+   但须挑盘面最强信号锁1个主形态明写（"最可能是审美型/社交型的人"），其余作次选一句带过，
+   ❌禁并列成"可能A可能B可能C，你自己感受为准"的免责菜单；心理特质必须挂具体行星状态；
+   禁止"TA是那种…的人"式单一形态断言，禁止纯特质罗列
 ```
 
 ### love_step2.md: 时间窗口
@@ -273,7 +300,7 @@ description: 吠陀占星(Vedic/Jyotish)恋爱时机分析引擎。当用户提�
 
 1. **禁止幻觉:** 所有结论必须基于已提取数据，不得凭空捏造行星位置
 2. **严谨区分三层:** "心动机会" ≠ "肉体激情" ≠ "深度关系"，不可混为一谈
-3. **双系统共振:** Vimsottari(心理意愿) + Jaimini(环境机会) 必须同时验证
+3. **双系统共振:** Chara Dasha 交叉验证——KN Rao 双系统方法，数据取 structured_data"Chara Dasha 时间线"节（calc 生成，JHora 金标准已验证）；该节缺失时只用 A 系统，禁止凭通识心算、禁止宣称"双系统共振"
 4. **性别差异:** 女盘关注金星+木星，男盘关注金星，不可混用
 5. **现代视角:** 考虑网恋、社交媒体、异地等现代恋爱形态(Rahu/3/11宫)
 6. **语言自适应:** 使用与用户输入相同的语言输出报告

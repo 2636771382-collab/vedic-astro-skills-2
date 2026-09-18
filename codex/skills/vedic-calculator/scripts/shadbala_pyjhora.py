@@ -50,6 +50,12 @@ def calculate_shadbala_fixed(year, month, day, hour, minute, lat, lon, tz_offset
         orig_he = swe.houses_ex
         if not hasattr(orig_he, '_patched'):
             def patch_he(*a, **kw):
+                # PyJHora drik.ascendant() 不传 hsys → pyswisseph 默认落到 Placidus，
+                # 而 Placidus 在极圈内(|lat|>66°33')无解，houses_ex 直接报错、整张盘算不出。
+                # 补 b'W'(整宫制，与 engine.calc_lagna 同口径)：asc 值与宫制无关
+                # (实测 W/E/O/C/B 返回同一 asc)，中低纬度 A/B 逐字节零变化。
+                if len(a) < 4 and 'hsys' not in kw:
+                    a = a + (b'W',)
                 r = orig_he(*a, **kw)
                 return (r[0], r[1]) if len(r) == 3 else r
             patch_he._patched = True

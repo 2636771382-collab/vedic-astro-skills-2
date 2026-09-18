@@ -58,10 +58,10 @@
 
 ---
 
-## 4. South 附加项（可选体检，默认不进主筛）
+## 4. South 附加项（不做）
 
-Mahendra / Vedha / Rajju / Sthree Dheerga —— 仅在用户要求或月宿信号矛盾时作补充参考，
-不与 North 八项混算，不影响维度结论。
+Mahendra / Vedha / Rajju / Sthree Dheerga —— 超出本体系筛查范围，本系统不做；
+用户问及时明说"超出本体系筛查范围，不做判定"，禁止凭通识排查表补算。
 
 ---
 

@@ -1,9 +1,18 @@
 ---
 name: vedic-career
-description: 吠陀占星(Vedic/Jyotish)职业分析引擎。当用户提供星盘PDF、截图或文本数据，并要求进行职业分析、事业解读、星盘事业方向分析时触发此技能。也在用户提到"印度占星"、"吠陀占星"、"Jyotish"、"星盘职业分析"、"D9分析"、"Navamsa事业"、"10宫分析"等关键词时触发。
+description: "Analyze career direction, strengths, role fit, work patterns, and Dasha timing from a verified Vedic/Jyotish chart. Use for 'Vedic career reading', 'career direction from my chart', 'what work suits me', 'career timing', D9/D10 or 10th-house career questions; Chinese requests such as '职业分析', '事业方向', or '星盘职业分析'; and Japanese requests such as '適職を知りたい', '仕事運を見て', or 'キャリアを分析して'. / 吠陀占星职业分析引擎。"
 ---
 
 # 吠陀职业架构分析引擎 (Vedic Career Architect)
+
+## Language contract / 语言契约
+
+- Set `client_language` from the user's explicit language request; otherwise match the language of the latest substantive user message.
+- Use `client_language` for all chat replies, intake questions, confirmations, progress updates, user-visible warnings, reports, and Q&A. Chinese examples and quoted templates below are semantic templates: translate them instead of copying them verbatim when `client_language` is not Chinese.
+- Keep canonical filenames, CLI flags, JSON keys, `structured_data.md` schema headings, technical codes, and Sanskrit/English identifiers unchanged. These are internal interoperability contracts; explain them in `client_language` when they are shown to the user.
+- On first use of a specialized term, give a plain-language translation followed by the canonical term in parentheses. Never translate canonical identifiers inside calculations or evidence citations.
+- If the user changes language mid-run, preserve the existing data and artifact lineage; switch client-facing language from that point onward unless the user explicitly asks to regenerate earlier artifacts.
+- When `client_language` is Japanese, read `resources/ja-career.md` completely before the first Japanese client-facing message. Apply it only as a terminology, register, intake, and rendering layer; it never changes the career workflow, evidence, scoring, phases, or output requirements.
 
 ## 概述
 
@@ -43,7 +52,7 @@ description: 吠陀占星(Vedic/Jyotish)职业分析引擎。当用户提供星�
 
 - 数据表里可以用编号和专业术语（L10、Shadbala、SAV等），那是参考表
 - 解读段落里可以提术语，但**必须当场解释**：
-  ✅ "你的8宫（管危机和深度的宫位）SAV=38，全盘最高——你对人性黑暗面的感知力是最强的"
+  ✅ "你的8宫（管危机和深度的宫位）SAV=38（溢出档）——你对人性黑暗面的感知力很强"
   ❌ "8宫SAV=38，P4资源溢出，L8落陷"
 - 连续两句话都在堆数字而不解释 → 禁止
 - "该行星""此配置""上述参数""综上所述""值得注意的是" → 禁止，这是论文不是聊天
@@ -108,18 +117,24 @@ description: 吠陀占星(Vedic/Jyotish)职业分析引擎。当用户提供星�
 - D1行星位置、宫主表、Shadbala、SAV/BAV
 - D9/D10数据和可信度标注
 - D4数据（财产与事业的交叉分析）
-- 预分析（尊贵度、相位关系）
+- 预分析（尊贵度、Graha Drishti 宫位照射）
 - Dasha时间线
 
-⚠️ SAV读取铁规：
-  引用任何宫位的SAV值时，必须从structured_data的"宫位映射"表读取。
-  禁止从"原始值（按星座）"表读取或自行计算sign→house映射。
-  输出时必须标注对应星座，格式：N宫(Sign)SAV=X
+⚠️ SAV读取铁规（唯一定义见 vedic-core/resources/house_framework.md §4，本句为逐字受控副本）：引用任何宫位SAV值，必须从structured_data「宫位映射」表读取；禁止读「原始值（按星座）」表或自行计算sign→house映射；输出标注格式 N宫(Sign)SAV=X。
   例："10宫(Le)SAV=30" "2宫(Sg)SAV=33"
 ## 分析流程
 
 严格按4阶段执行，每阶段的结论作为下一阶段输入。
 **所有数据从structured_data.md读取，不自己计算。**
+
+### 【分盘视角分离铁律】（引用 D10/D4/D5 等任何小分盘时必守）
+
+> 引用任何小分盘(D9/D10/D4/D5…)必守，禁混用两条线、禁不标视角：
+> · 线A(分盘内部宫主)：用分盘自身 Lagna 推，记法"D10-L10=Saturn，落 D10-H\*"；直接读 structured_data「分盘内部宫主表 + 尊贵度（线A）」段(calc查表)，❌禁自推。D10-L10 由 D10 Lagna 定，不是本命 L10。
+> · 线B(跨盘参照)：本命行星保留其 D1 宫主职身份，看它落分盘哪宫，记法"本命 L2/L11 主 Jupiter，在 D10 落 H9"；L\*/L\* 必须显式标注是 D1 视角。
+> 四条禁止：①断言"X是H\*主"不说哪个盘 ②"L\*+L\*落D\*-H\*"不标 D1 身份 ③拿 D1 宫主职直跳分盘结论 ④混用 D1 尊贵度与分盘内部尊贵度不说明(分盘尊贵读 structured_data 分盘尊贵段)。
+> 冲突仲裁：线A线B不一致→分别呈现，禁折衷"综合来看"。输出=【分盘内部结构(线A)】+【跨盘参照(线B)】+【综合判断】三段。
+> （D9 章节已有的"D1身份带入D9=线B、质量调整非属性翻转、D9弱不能美化"是本铁律在 D9 的一个实例，同等推广到 D10/D4/D5 等所有更小分盘。）
 
 ### 分步写入规则（强制）
 
@@ -150,7 +165,7 @@ Phase 4 Part 3   → 写入 career_phase4c.md
 **步骤:**
 1. 确定 **L10(10宫主)** 的落宫、星座、状态（从预分析读取，不重算）
 2. 检查 **10宫内行星(Occupants)**
-3. 检查与L10/10宫的 **互容(Parivartana)** 和 **紧密相位**（从预分析·相位表读取）
+3. 检查与L10/10宫的 **互容(Parivartana)** 和 **紧密相位**（同宫合相 / graha drishti 照射：读预分析「Graha Drishti」表 + 行星落宫；❌不用西占 orb 相位）
 4. 归类为以下类型（可复合）：
 
 | 类型 | 判定逻辑 |
@@ -160,9 +175,11 @@ Phase 4 Part 3   → 写入 career_phase4c.md
 | 商贸/自由型 | L10关联7宫/3宫/5宫 |
 | 隐形/虚拟型 | L10关联8宫/12宫 |
 
-5. **D10交叉验证**（新增）：
-   - D10 Lagna与D1 10宫主的一致性
-   - D10中10宫主/强星位置 → 事业方向二次确认
+5. **D10交叉验证**（新增，遵循分盘视角分离铁律）：
+   - D10 Lagna与"本命L10(D1 10宫主)落 D10 哪宫"的一致性对照（本命L10 是 D1 视角身份）
+   - 线A(分盘内部)：D10-L10（由 D10 Lagna 定，读 structured_data 分盘内部宫主表）的落宫/强星位置 → 事业方向二次确认
+   - 线B(跨盘参照)：本命强星（如 AmK / 本命L10）落 D10 哪宫，记法"本命L10主X 在 D10 落 H\*"
+   - 线A线B不一致 → 分别呈现，禁折衷
    - D10可信度为⚠️ → 措辞留余地
 
 6. 风险补丁检查：
@@ -173,6 +190,7 @@ Phase 4 Part 3   → 写入 career_phase4c.md
    - 情形1(企业技能岗): L10关联3宫 + 同时关联6宫或10宫
    - 情形2(纯自由职业): L10关联3宫 + 与11宫强连 + 与6/10宫弱连
    - 情形3(自由艺术家): 依赖3/5宫 + D5交叉检查创造力
+     · D5交叉遵循分盘视角分离铁律：线B记法"本命L5(D1 5宫主)/本命创造力星 落 D5-H\*"；若引 D5 内部宫主则标线A"D5-L\*（由 D5 Lagna 定）"，禁只写"D5中X"不标视角
 
 ---
 
@@ -181,32 +199,34 @@ Phase 4 Part 3   → 写入 career_phase4c.md
 **目标:** 识别决定职业上限的格局和天赋星。
 
 **数据引用:**
-- 格局扫描 → structured_data 预分析·相位关系 + 格局判定规则（参考vedic-core/resources/yogas.md）
+- 格局扫描 → structured_data 预分析·Graha Drishti + 格局判定规则（参考vedic-core/resources/yogas.md；合相=同宫、互视=graha drishti、互溶=parivartana）
 - 强星 → structured_data Shadbala排名（≥150%=强）
 - 变现 → structured_data SAV表（2宫/11宫SAV值）
 
 **步骤:**
 1. **格局扫描** — 仅提取接通事业/财富系统的格局：
    - 五大伟人格局(Panch Mahapurusha): 参考预分析尊贵度
-   - 贵格(Raja Yoga): 参考预分析宫主表+相位关系
+   - 贵格(Raja Yoga): 参考预分析宫主表 + Graha Drishti 互视（合相=同宫、互溶=parivartana，见 yogas.md）
    - 富格(Dhana Yoga): 参考2/11宫主互动
    - Vipreet Raja Yoga: 6/8/12宫主互飞
-   - Gaja Kesari/Adhi Yoga: Moon与吉星关系
+   - Gaja Kesari/Adhi Yoga: 判定条件见 vedic-core/resources/yogas.md，禁止按"Moon旁有吉星"即兴判成立
+   - （以上为事业/财富重点项，非封闭集：yogas.md「主要格局扫描清单」中其余接通 10宫/2宫/11宫/AmK 的格局一并扫描）
 
 2. **强点锁定:**
    - AmK(事业指标星) → 从structured_data Chara Karakas读取
    - 所有Exalted/Own Sign/Vargottama → 从预分析尊贵度读取
    - 逆行/焦伤 → 从structured_data行星位置读取
 
-3. **变现校验:**
-   - 强星连接2宫(SAV值) → 路径A(产品/资产型)
-   - 强星连接11宫(SAV值) → 路径B(流量/服务型)
+3. **变现校验:**（路径由"强星连接哪个宫"定，SAV ❌不作路径判据）
+   - 强星连接2宫 → 路径A(产品/资产型)（2宫SAV极端值>32/<20时作强度佐证）
+   - 强星连接11宫 → 路径B(流量/服务型)（11宫SAV极端值>32/<20时作强度佐证）
    - 强星连接8宫 → 路径C(危机/资源型)
 
-4. **D4财富交叉**（新增）：
-   - D4 Lagna和4宫主 → 物质基础评估
-   - D4中Venus位置 → 财产/舒适度潜力
+4. **D4财富交叉**（新增，遵循分盘视角分离铁律）：
+   - 线A(分盘内部)：D4 Lagna 与 D4-L4（由 D4 Lagna 定，读 structured_data 分盘内部宫主表）→ 物质基础评估
+   - 线B(跨盘参照)：本命Venus(D1 Karaka)落 D4-H\* → 财产/舒适度潜力（记法"本命Venus(D1 Karaka)在 D4 落 H\*"）
    - 与2/11宫变现路径交叉 → 事业是否带来实质财富积累
+   - 线A线B不一致 → 分别呈现，禁折衷
    - D4可信度为⚠️ → 措辞留余地
 
 5. 为每个格局写 **"Phase 4强制策略指令"**
@@ -230,6 +250,7 @@ Phase 4 Part 3   → 写入 career_phase4c.md
 4. **职业人格(D9上升):** 成熟期管理风格
 5. **最终果实(D1 L10在D9的落点):** 职业终局
 6. **Karakamsha:** AK/AmK在D9落点
+   - 约束：Karakamsha 只读 AK 的 D9 落宫，用宫位主题语言描述内在驱动（参照 house_framework 宫义），禁止引用古典 Karakamsha 星座职业清单；AmK 的 D9 落点并入第2项武器压力测试处理
 7. **阶段总结(The Bridge):** 一段话串联D1→D9结论
 
 ---
@@ -257,10 +278,15 @@ Phase 4 Part 3   → 写入 career_phase4c.md
 
 **STEP 2 四层精密合成:**
 - Layer 1 物理骨架(D1): L10落宫(哪里?) + 手段(谁影响L10?具体指出是土星/火星/水星)
-- Layer 2 灵魂内核(D9): D9-10宫注入D1(例: D1火星+D9金星=整形外科而非普外)
+- Layer 2 灵魂内核(D9): D9-10宫注入D1(例: D1火星+D9金星→"精密手作+审美"特征族，
+  形态族举例如整形外科/修复医学/高端定制——举例非穷尽，不锁定单一行业)
 - Layer 3 管理面具(D9上升): 用什么态度执行(例: 水瓶座抽离感处理白羊座战场)
 - Layer 4 暗物质(L8/L12): 若深度参与Layer1 → 加入"高风险/跨境/深度研究/非常规路径"定语
 - **>>> 最终定义格式:** "基于[D1手段]的[D9内核]专家，以[D9人格]的风格运作，最终实现[格局]的变现。"
+- **>>> 反假精度（与 core 板块3 同源纪律，精简副本）:** 盘面给的是赛道特征，到具体职业是
+  一对几十的映射——行业名词是假精度。最终建议以四特征组合为准（内容性质/推进方式/
+  组织形态/变现路径），具体职业名只作"形态族举例（非穷尽）"并明示"看性质不看行业标签"；
+  排除句只排除特征，❌不排除具体行业名词。
 
 **STEP 3 动态叙事:** 根据盘面强弱流动(非死板公式)，判断核心驱动力是D1 L10还是Phase2强星
 **STEP 4 终极决策:**
@@ -274,6 +300,10 @@ Phase 4 Part 3   → 写入 career_phase4c.md
      → 时间节点必须带括号标注推导依据：
        ✅ "2028-2031年是事业定型期（Mercury=L10, Shadbala 104%, 正面3/负面0→正面期）"
        ❌ "2028-2031年是事业定型期"（无推导依据）
+     → 时间窗纪律（见 house_framework「时间窗纪律」节，一并执行）：事件性措辞至少落
+       MD×AD 阶段窗、大运级只写背景趋势期；一旦点名月份/季度内先后/任何窄于完整AD的窗口，
+       必须引 calculator 原生PD，PD不可用时明确降级、❌禁用AD冒充月级精度；Chara双系统交叉
+       （无「Chara Dasha 时间线」节❌禁心算/禁称双系统确认）；回顾过去 Dasha 必须双向列正负面
 **STEP 5 现实听诊:** Combust/Sandhi/Retrograde/6-8凶星云集检查
 
 ## 输出格式
@@ -308,7 +338,7 @@ STEP 2: 四层精密合成 (Layer 1-4)
 1. **正反双审（最重要）**: 回答任何判断性问题（适不适合/能不能/好不好）时，必须同时列出支持和制约的数据。禁止只挑用户想听的一边。
 2. **基于已有数据回答**: 引用报告中的L10/格局/D9/Dasha数据，不脱离报告编造
 3. **行业匹配追问**: 用户问"XX行业/岗位适合吗?"→ 用L10+格局+D9做匹配度分析
-4. **时机追问**: 用户问"XX时间适合跳槽/创业吗?"→ 查Dasha时间轴+10宫SAV推演
+4. **时机追问**: 用户问"XX时间适合跳槽/创业吗?"→ 查Dasha时间轴推演（10宫SAV 仅极端值>32/<20时作强度佐证，不定时机方向）
 5. **假设推演**: 用户问"如果我选X会怎样?"→ 基于数据列利弊，不做价值判断
 6. **语言风格**: 遵循全局语言约束（70%解读+20%数据+10%注释），用大白话
 7. **文件保存**: 每次Q&A回答保存为 `qa_主题.md`（如 `qa_career_change.md`），存入工作目录/parts/
