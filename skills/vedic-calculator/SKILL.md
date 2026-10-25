@@ -20,7 +20,7 @@ description: "Calculate a complete Vedic/Jyotish natal chart directly from birth
 ## 前置条件
 
 - Python 3.8 ~ 3.13（pysweph 为 C 扩展，**3.14 暂不支持**）
-- 依赖: pysweph, PyJHora==4.8.6, pytz
+- 依赖: pysweph, PyJHora==4.8.6, pytz, tzdata（时区规则库；Windows 跑 vedic-prashna 必需）
 
 > ⚠️ **不要直接 `pip install -r requirements.txt`！** PyJHora 未声明其运行时依赖，且 pip 包缺少 .se1 星历文件。
 > 请使用 `setup_env.py` 自动安装（见下方）。
@@ -57,7 +57,7 @@ description: "Calculate a complete Vedic/Jyotish natal chart directly from birth
 
 该脚本会自动检查：
   ✅ venv 位置和 Python 版本
-  ✅ 3个核心依赖（pysweph/PyJHora/pytz）
+  ✅ 3个核心依赖（pysweph/PyJHora/pytz）+ zoneinfo 时区库（Windows 靠 tzdata）
   ✅ swisseph 空壳检测
   ✅ 星历表文件
   ✅ 最小计算测试（SAV=337）
@@ -76,7 +76,7 @@ description: "Calculate a complete Vedic/Jyotish natal chart directly from birth
 向用户收集：
 ```
 - 出生日期 (YYYY-MM-DD)
-- 出生时间 (HH:MM，24小时制)
+- 出生时间 (HH:MM，24小时制；来源本身带秒（如 JHora 打印盘、带秒的出生记录）就连秒一起收，没有不追问)
 - 出生地点 (城市名)
 - 性别
 - 感情状态（可选）
@@ -142,7 +142,9 @@ chart = calculate_full_chart(
     tz_str="TIMEZONE",
     # 按“有效精度”传入：出生证分钟记录至少审计±1；家人明确记忆通常5；
     # ±15分钟报时传15。它审计输入稳定性，不改变报时本身。
-    uncertainty_minutes=1
+    uncertainty_minutes=1,
+    # 来源带秒就填（可带小数），没有就省略（默认 0）。整张盘只用这一个瞬间。
+    second=0,
 )
 
 # 计算当前过运
@@ -155,7 +157,7 @@ transit = calc_transit(
 # 元信息
 meta = {
     'dob': 'YYYY-MM-DD',
-    'time': 'HH:MM',
+    'time': 'HH:MM',               # 传了秒就写 'HH:MM:SS'
     'place': '城市名',
     'lat': LAT, 'lon': LON,
     'time_precision': '精确到分钟',
@@ -292,7 +294,9 @@ structured_data.md 生成后，向用户输出：
 ```python
 chart = {
     # 基础天文
-    'ayanamsa': 23.8982,           # float, True Chitra ayanamsa 度数（约23.9°，与Lahiri差<1′）
+    'ayanamsa': 23.8982,           # float, True Chitra ayanamsa 度数（约23.9°，与Lahiri差<1′）；行星与 Lagna 实际使用的值，＝桌面 JHora 打印值
+    'calc_meta': {'engine_version': 'v1.0.1', 'instant_utc': '1990-08-15T02:30:00.000000Z', 'ayanamsa': 23.8982},  # 溯源
+    'calc_errors': {},             # 没算出来的附加项及原因，如 {'chara_dasha': 'RuntimeError: …'}；非空时 structured_data 头部有警告行
     'lagna': {
         'sign': 'Cancer',          # str, 英文星座名
         'sign_idx': 3,             # int, 0-indexed (Aries=0)
@@ -377,7 +381,7 @@ chart = {
     'd4':  {'Lagna': ('Libra', 6),   'Sun': ('Leo', 4), ...},
     'd5':  {'Lagna': ('Pisces', 11), 'Sun': ('Scorpio', 7), ...},
     'vargottama': {'Sun': False, 'Moon': False, 'Rahu': True, ...},
-    'divisional_charts': {'D2': ..., 'D3': ..., ...},  # 额外分盘
+    'divisional_charts': {'D2': ..., 'D3': ..., ...},  # 额外分盘；D2 为 Uma Shambhu Hora（同 JHora "D-2 (US)"），非传统 Sun/Moon Hora
 
     # 预分析
     'karakas': {'7k': [...], '8k': [...], 'dk_7k': 'Saturn', 'dk_8k': 'Rahu', 'dk_note': '7K(主)=Saturn, 8K(参考)=Rahu'},
