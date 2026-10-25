@@ -10,11 +10,17 @@ calculation, evidence ledger, judgment authority, or follow-up boundaries in
 
 - Use concise, calm `です・ます` prose. Prashna answers one concrete matter; do not
   inflate it into a natal life reading.
-- Lead with the current judgment in ordinary Japanese, then show the auditable
-  reasons and the strongest contrary signal.
-- Translate `成/悬/不成` semantically, not mechanically. Prefer
-  `成立・実現の方向`, `保留・未決着`, or `現時点では不成立の方向`, followed by
-  one sentence explaining what that means for the user's observable question.
+- Lead with the story in ordinary Japanese: a headline written for this specific matter
+  that makes the direction unmistakable, a short summary paragraph, then a chart-based
+  reading that follows `judgment-writing.md` (classical terms such as Lagna, Bhava,
+  Graha, Drishti, Kendra are welcome, each glossed in Japanese on first use), then the
+  auditable reasons. The writing guide never changes the tier set by the ledger.
+- Do not show the internal tier names `偏成/持平/偏不成` or verdict words such as
+  `成立する／しない`, `必ず`, `絶対`, `見込みなし` in the headline, subtitle, or body.
+  In the audit section translate the tiers as `成立寄り`, `拮抗`, `不成立寄り`, with
+  strength `順調／抵抗あり` and `明確／転機あり`. When a favourable direction came from
+  rubric §4.1 preponderance, describe it as `困難を経て進む方向` and name where the
+  resistance lies.
 - Do not use divinatory theatrics, fear language, or absolute guarantees.
 
 ## Stable terminology
@@ -57,13 +63,16 @@ with it.
 
 Use this order where the required artifact permits:
 
-1. `現在の判定`
-2. `判定対象と成立条件`
-3. `主要な成立材料`
-4. `主要な阻害材料`
-5. `Moon の役割`
-6. `結論の範囲`
+1. 見出し（この件に即した一文）
+2. 要約（方向、鍵になる点、時期の目安を短い一段落で）
+3. 盤面の読み（盤面の特徴で小見出しを立て、質問者の側・事柄や相手の側・両者の間・心境・
+   古法の合算を、それぞれ盤の事実に沿って数段落で）
+4. 時期（偏不成なら、どんな変化があれば改めて問えるか）
+5. 今できること
+6. 確認欄（範囲、内部区分、判定根拠表と背景事実、時期、Moon の事実、体系の境界）
 
-If event timing is not authorized or not supported at production resolution, say
-so once in direct Japanese. Do not substitute a natal Dasha, Moon ingress, or a
-generic transit date.
+Render the standard timing overlay (`timing_overlay.md`) only for `偏成` or `持平`:
+use `目安として…` for `偏成` and a conditional such as `順調に進めば、目安として…`
+for `持平`. For `偏不成`, give no timing; say once in direct Japanese what change
+would make the question worth asking again. Do not substitute a natal Dasha, a
+generic transit date, or a Tajika/KP date for it.
