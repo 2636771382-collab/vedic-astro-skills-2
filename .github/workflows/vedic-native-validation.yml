@@ -1,0 +1,40 @@
+name: Vedic native engine validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["audit-native-2026-10-25"]
+    paths:
+      - ".github/workflows/vedic-native-validation.yml"
+      - "tools/vedic_native_audit.py"
+
+permissions:
+  contents: read
+
+jobs:
+  gold-standard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build PyJHora environment from upstream install script
+        run: python skills/vedic-calculator/scripts/setup_env.py
+      - name: Prove imports and execute environment self-test
+        run: |
+          skills/vedic-calculator/venv/bin/python -c "import swisseph, jhora; print('Swiss:', swisseph.version, 'PyJHora: import OK')"
+          python skills/vedic-calculator/scripts/check_env.py
+      - name: Run upstream desktop JHora precision regression
+        run: skills/vedic-calculator/venv/bin/python skills/vedic-calculator/tests/test_engine_precision.py
+      - name: Run native SAV Shadbala MD AD PD gold audit
+        run: skills/vedic-calculator/venv/bin/python tools/vedic_native_audit.py
+      - name: Upload public reference audit files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vedic-native-gold-reference
+          path: vedic-native-output/
+          if-no-files-found: warn
+          retention-days: 7
