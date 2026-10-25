@@ -1,138 +1,94 @@
-# Rectifier Candidate Settlement and Expert Synthesis
+# Rectifier Candidate Settlement: Judgment First
 
 Read this module at Step 3c and whenever a D1, D9, D10, D4/D5, or relevant
-boundary candidate set is being settled. It implements the two standing
-operator policies declared in `vedic_rectifier_execution_overlay.md` while
-preserving all canonical skill calculations and visible requirements.
+boundary candidate set is being settled. Since 2026-10-24 the selected skill
+settles each layer by expert judgment over a full-candidate mapping table; the
+reference score is displayed but is not a gate. This module adds Codex
+execution discipline to that method; it never replaces the skill's
+calculations, guardrails, checkpoints, or visible requirements.
 
 ## Settlement sequence
 
-Complete these analytical operations in order. They are a reasoning sequence,
-not a requirement to create a new client-facing section for every operation.
+Follow the skill's "每层统一流程" in order:
 
-1. Complete the skill-required full candidate-by-evidence canonical matrix and
-   preserve its original scores and totals.
-2. Audit which rows actually distinguish the candidates.
-3. State the event-leg result and structure-leg result separately.
-4. Search the full candidate set for the strongest counterevidence.
-5. Perform candidate-level expert synthesis.
-6. Apply the active parity settlement and the skill's current transition and
-   resolution rules.
+1. List every current candidate by objective name and the chart fields that
+   actually vary among them at the active layer (read calculator output; never
+   hand-compute).
+2. Build the mapping table: every existing item (dated events against Dasha by
+   the two-endpoint method; facts, traits, and experiences against the varying
+   structures) gets ✅✅ / ✅ / ⚠️ / ❌ plus a one-line reason for every candidate.
+   Group items explained by the same chart structure and weigh each group once.
+   Mark rows that do not discriminate and rows that are post-hoc observations.
+3. Write the main-line judgment for each candidate: can it explain the
+   person's adult life course across the dominant Dasha periods?
+4. Write the runner-up advocacy once, at most three points. It lowers
+   confidence to "low" only when it contains a decisive opposing item pointing
+   to the runner-up; structural highlights or personality resemblance alone do
+   not lower confidence. Do not rewrite it after questionnaire feedback.
+5. Display the reference score (✅✅=2, ✅=1, ⚠️=0, ❌=−1, structure groups
+   deduplicated). If judgment and reference score point in opposite
+   directions, state why.
+6. Settle with a leader, a confidence level (high / medium / low), and the two
+   or three decisive or most discriminating items. Add real-world source
+   evidence only after this astrological draft.
+7. High or medium: present the interim conclusion and stop for the user's
+   confirmation. Low: read `resources/calibration_quiz.md` completely and run
+   one questionnaire round, then return to step 2 for all candidates.
+8. After two rounds still low: give the best estimate and what evidence is
+   still missing, and let the user decide. Never close a layer on your own.
 
-## Evidence and candidate-difference audit
+## Decisive opposing evidence
 
-- For every evidence item, consider factual reliability, date or response
-  precision, candidate discrimination, and independence. Record the full
-  ledger in a technical artifact when it materially aids reproducibility;
-  client-facing prose need show only the attributes that affect settlement.
-- After the canonical matrix, identify:
-  - rows shared by all candidates;
-  - differences driven only by vague dates or Dasha boundaries;
-  - rows belonging to one correlated real-world transition;
-  - genuine candidate flips in Dasha, lordship, placement, drishti, divisional
-    structure, or another skill-authorized factor;
-  - the exact evidence that creates the leader-versus-runner-up difference.
-- A shared row can be reliable without helping rank candidates. Do not remove
-  it from the canonical matrix or count it as independent ranking evidence.
-- Do not build a second total. The difference audit explains the canonical
-  result and informs expert judgment without adding, subtracting, or
-  deduplicating skill scores.
+- A user-confirmed objective fact or dated event that one candidate strongly
+  predicts and the other candidate predicts the opposite of (not merely fails
+  to mention). One such item may settle that pair regardless of the reference
+  score gap.
+- Structural highlights, self-assessed traits, relationship atmosphere,
+  boundary events, and post-hoc rules may strengthen or weaken judgment but
+  can never serve as decisive evidence alone.
+- If each of two candidates has a decisive item pointing to itself, that is a
+  genuine conflict: confidence is low and a questionnaire round follows.
 
-## Separate the two equal evidence legs
+## Evidence handling
 
-- Report `event × Dasha` and `trait/attribute × candidate structure`
-  separately, then say whether they converge, conflict, or lack discrimination.
-- Multiple structural answers count as multiple independent axes only when
-  both their chart bases and lived distinctions are meaningfully independent.
-  Several phrasings of one placement or one life transition remain correlated.
-- Do not inflate the event leg through common scores, repeated stages of one
-  event, low date precision, boundary treatment, or an invalid representative
-  point. Do not inflate the structure leg through Barnum wording, answer
-  leakage, repeated axes, or unequal option appeal.
-- When one leg is one-sided, show that result clearly. Do not dismiss it by
-  category label, and do not use it to erase the other leg's real contrary
-  evidence.
+- `event_house_map.md` is a common reference, not a closed universe. A rule
+  added from classical meaning must be written out and applied identically to
+  every candidate. When an auxiliary house decides the outcome, check whether
+  the conclusion survives with core houses only, and say so.
+- Judge each candidate independently before comparing. Do not downgrade a
+  candidate that fits fully on its own because another candidate looks more
+  striking.
+- Keep every dated event at its real precision. Use the skill's endpoint,
+  Moon-Nakshatra split, and boundary treatment; never substitute a midpoint,
+  the original time, or a favorite-candidate point.
+- PD remains a post-MD/AD difference audit. It never locates a birth minute.
+  Minute resolution comes only from divisional sign changes.
+- In fine-tuning layers, default to the divisional structure comparison and
+  inspect Dasha only under the skill's candidate-varying MD/AD or qualifying
+  PD condition.
 
-## Full-candidate counterevidence
+## Real-world source
 
-- Search all current candidates, not only the favorite or the two shown in a
-  questionnaire. Apply new evidence with the same method to each.
-- For every plausible candidate, identify its strongest support and strongest
-  contradiction. Ask what would have to be explained away for that candidate
-  to win.
-- When feedback strongly favors one structure candidate, audit the event leg
-  for common-score inflation, correlation, date imprecision, boundary effects,
-  or invalid interval sources. This audit changes a canonical row only when
-  the row's input or method is actually invalid.
-- Do not rescue conflict after feedback by rewriting both legs into agreement.
-  Preserve real disagreement and judge its evidentiary meaning.
+- Source evidence (certificate, wristband, consistency of family memories,
+  daylight) enters after the astrological draft, weighted by reliability.
+- When the astrological leader runs against the source direction, show both
+  sides. Never invent explanations that dissolve the contradiction. Going
+  against the source is allowed only by naming the decisive item that
+  outweighs it.
 
-## Candidate-level expert synthesis
+## Counterevidence and reopening
 
-After the audit, pause row-counting and treat every candidate as a complete
-explanatory hypothesis.
-
-For each candidate, judge:
-
-- whether it explains independent life domains rather than one attractive
-  cluster;
-- whether its Dasha events and structural portrait reinforce the same life
-  mechanism;
-- whether its strongest signals are candidate-specific or broadly available;
-- whether it survives its strongest counterevidence;
-- how much special pleading, answer fitting, or post-feedback storytelling it
-  needs;
-- whether its advantage remains when non-discriminating noise is set aside
-  conceptually.
-
-Then state a clear professional judgment with concrete support. Do not reduce
-this synthesis to a vote count, and do not invent a winner when the complete
-hypotheses remain genuinely comparable.
-
-## Active parity settlement
-
-- If both independently discriminating legs converge and no comparable
-  counterevidence remains, confirm the current layer.
-- If one high-quality leg discriminates strongly and the other genuinely does
-  not distinguish candidates, the discriminating leg may confirm the layer.
-  This applies equally to either evidence type.
-- If both legs discriminate but conflict, compare their reliability,
-  precision, discrimination, independence, and failure modes. Confirm only
-  when one is clearly stronger; otherwise retain `current best estimate` and
-  `underdetermined` at the tested resolution.
-- If neither leg distinguishes the candidates, do not manufacture certainty.
-  State what is already known and identify only a genuinely decision-changing
-  next discriminator.
-- Canonical numeric gates remain calculated and visible. If the active result
-  differs from the canonical raw-score leader, publish the divergence and the
-  exact evidence or policy responsible; never rewrite the totals to hide it.
-- Confirmation applies only to the tested layer. D1 confirmation fixes the
-  Lagna sign; D9/D10 and later layers control finer time resolution according
-  to the skill.
-
-## Incremental evidence and reopening
-
-- Before asking for more information, run the settlement above using all
-  existing evidence. Stop intake as soon as the layer settles.
-- Another questionnaire or evidence round is allowed only while the layer is
-  unsettled and it tests a named, decision-changing distinction not already
-  exhausted. There is no invented round quota.
-- On later evidence, show the new rows across all candidates, updated canonical
-  totals, the material difference audit, and the reopening decision. Do not
-  reprint unchanged history unless the skill or operator requests it.
-- Reopen a confirmed lower layer only when its canonical or parity result
-  changes, a skill restart trigger applies, or a prior source, endpoint,
-  calculation, or scored input is invalidated. Mere cross-domain relevance is
-  not enough.
+- Every new item is judged across the full candidate set, including trailing
+  candidates. "Not enough to overturn" may be written only after re-judging
+  and naming the evidence that outweighs it.
+- Reopen a settled layer when new information is decisive opposing evidence
+  for another candidate, drops that layer to low confidence, or invalidates a
+  source, endpoint, calculation, or mapping.
+- Do not perform downstream analysis before rectification is complete.
 
 ## Conclusion provenance
 
-- Keep raw-score leader, current best estimate, active confirmation,
-  user-adopted working chart, time confidence, and post-feedback fit distinct
-  in the technical record.
-- A working choice is not independent confirmation. Feedback may update
-  structural fit but cannot retroactively increase the confidence of a
-  pre-feedback prediction.
-- Once a layer is confirmed, say so without repetitive qualification. Refining
-  it at D9 or D10 does not turn the confirmed lower layer back into a mere
-  possibility unless valid new counterevidence reopens it.
+- Keep current leader, confidence level, user-accepted working chart, and
+  post-feedback fit distinct whenever more than one label matters.
+- Confirmation applies only to the tested resolution. D1 fixes the Lagna sign;
+  D9/D10 and later layers govern finer time resolution.
