@@ -14,7 +14,8 @@ prashna_<yyyymmdd_HHMMSS>_<label>/ 独立目录。
 默认标准层:
   - 仅输出 resources/standard-layer.md 的字段白名单。
   - 不输出本命 Dasha、Chara Karaka、SAV/BAV、分盘、Yoga 或过运。
-  - 当前不提供生产级 Prashna 时间窗。
+  - 不计算时间；偏成/持平档的时间副层由独立 build_timing_overlay.py 写 timing_overlay.md
+    (resources/timing-layer.md)，本脚本不导入它。
 
 用法:
     python build_prashna_data.py \\
@@ -85,7 +86,7 @@ def parse_args():
 
 
 def build_prashna_header(
-    dt, lat, lon, tz, question, label, chart_ayanamsa, dst_info
+    dt, lat, lon, tz, question, label, chart_ayanamsa, dst_info, calc_meta=None
 ):
     lines = []
     lines.append("## 元信息\n")
@@ -98,13 +99,18 @@ def build_prashna_header(
     lines.append("时间精度: 秒级输入已保留；小数秒按原输入/本机消息时间保留")
     lines.append("读盘方式: vedic-calculator 直接起 Prashna Kundali")
     lines.append(f"Ayanamsa: True Chitrapaksha(Lahiri 系) ({chart_ayanamsa:.4f}°)")
+    if calc_meta:
+        lines.append(
+            f"计算溯源: engine {calc_meta['engine_version']}｜计算瞬间 UTC {calc_meta['instant_utc']}"
+            f"｜实际岁差 {calc_meta['ayanamsa']:.6f}°（行星与 Lagna 同口径）"
+        )
     if dst_info and dst_info.get('is_dst'):
         lines.append(
             f"夏令时: ⚠️ 提问时刻处于当地夏令时期间(UTC 偏移 {dst_info['utc_offset']})"
         )
     lines.append("Node模式: Mean Node")
     lines.append("默认标准层: Shatpanchasika-rooted + KN Rao/Bhavan compatibility")
-    lines.append("生产级择时: 未启用")
+    lines.append("时间副层: 偏成/持平档另由 build_timing_overlay.py 写 timing_overlay.md")
     lines.append("```\n")
 
     lines.append("## 提问信息\n")
@@ -129,7 +135,7 @@ def main():
     # 3. 组装 Prashna 专用头部
     head = build_prashna_header(
         args.dt, args.lat, args.lon, args.tz, args.question, args.label,
-        chart['ayanamsa'], chart.get('dst_info'),
+        chart['ayanamsa'], chart.get('dst_info'), chart.get('calc_meta'),
     )
 
     # 4. Moon 当前事实(沙箱内计算，不生成全局成败或时间窗)
@@ -141,8 +147,14 @@ def main():
     # 5. 写入独立子目录。Tajika 与 KP 不在标准 builder 中导入或追加：
     #    Tajika 由 build_tajika_overlay.py 在 Phase 2 选定主星后生成；
     #    KP 由独立的 build_kp_horary.py 生成。
+    #    同名目录里已有产物时另开 _2、_3……，不覆盖旧盘（目录名只到整秒，同秒同 label 重跑、
+    #    改地点或改问题重跑都会撞名）。
     subdir_name = f"prashna_{datetime_slug(args.dt)}_{args.label}"
-    out_dir = Path(args.out_parent).resolve() / subdir_name
+    base_dir = Path(args.out_parent).resolve() / subdir_name
+    out_dir, n = base_dir, 1
+    while (out_dir / "structured_prashna.md").exists():
+        n += 1
+        out_dir = base_dir.with_name(f"{subdir_name}_{n}")
     out_dir.mkdir(parents=True, exist_ok=True)
     # 产物名严格区分本命根 structured_data.md
     out_path = out_dir / "structured_prashna.md"
